@@ -20,6 +20,15 @@ export class StoryService {
     return this.getAll().filter((story) => story.projectId === projectId);
   }
 
+  getStoriesByProjectAndStatus(
+    projectId: string,
+    status: StoryStatus,
+  ): Story[] {
+    return this.getAll().filter(
+      (story) => story.projectId === projectId && story.status === status,
+    );
+  }
+
   getStoryById(id: string): Story | undefined {
     return this.getAll().find((story) => story.id === id);
   }
@@ -88,6 +97,22 @@ export class StoryService {
 
     this.saveAll(filtered);
     return true;
+  }
+
+  updateStoryStatus(id: string, status: StoryStatus): Story | null {
+    const stories = this.getAll();
+    const index = stories.findIndex((story) => story.id === id);
+    if (index === -1) {
+      return null;
+    }
+
+    stories[index] = {
+      ...stories[index],
+      status,
+    };
+
+    this.saveAll(stories);
+    return stories[index];
   }
 
   deleteStoriesByProject(projectId: string): void {
