@@ -30,6 +30,7 @@ app.innerHTML = `
       <h1>ManageMe</h1>
       <p class="subtitle">Zarzadzaj projektami, historyjkami i zadaniami</p>
       <p class="logged-user">Zalogowany: <strong id="logged-user-name"></strong></p>
+      <button type="button" id="theme-toggle-btn" class="theme-toggle">🌙 Ciemny</button>
     </header>
 
     <section class="form-section">
@@ -205,6 +206,53 @@ const taskCancelBtn =
   document.querySelector<HTMLButtonElement>("#task-cancel-btn")!;
 const taskBoard = document.querySelector<HTMLDivElement>("#task-board")!;
 const taskDetails = document.querySelector<HTMLDivElement>("#task-details")!;
+const themeToggleBtn = document.querySelector<HTMLButtonElement>(
+  "#theme-toggle-btn",
+)!;
+
+const THEME_STORAGE_KEY = "manageme-theme";
+type Theme = "light" | "dark";
+
+function updateThemeToggleLabel(theme: Theme): void {
+  themeToggleBtn.textContent = theme === "dark" ? "☀️ Jasny" : "🌙 Ciemny";
+}
+
+function applyTheme(theme: Theme): void {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+  updateThemeToggleLabel(theme);
+}
+
+function getThemePreference(): Theme {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  if (saved === "light" || saved === "dark") {
+    return saved;
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function initThemeToggle(): void {
+  applyTheme(getThemePreference());
+
+  themeToggleBtn.addEventListener("click", () => {
+    const isDark = document.documentElement.classList.contains("dark");
+    const nextTheme: Theme = isDark ? "light" : "dark";
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    applyTheme(nextTheme);
+  });
+
+  const darkMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  darkMediaQuery.addEventListener("change", (event) => {
+    const hasSavedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (hasSavedTheme) {
+      return;
+    }
+
+    applyTheme(event.matches ? "dark" : "light");
+  });
+}
 
 function getActiveProjectId(): string | null {
   const id = activeProjectService.getActiveProjectId();
@@ -951,6 +999,7 @@ taskCancelBtn.addEventListener("click", cancelTaskEdit);
 
 loggedUserName.textContent = `${loggedInUser.firstName} ${loggedInUser.lastName} (${loggedInUser.role})`;
 
+initThemeToggle();
 renderProjects();
 renderStories();
 renderTaskStoryOptions();
