@@ -1,8 +1,10 @@
 import "./style.css";
+import type { Notification } from "./models/Notification";
 import type { Project } from "./models/Project";
 import type { Story, StoryPriority, StoryStatus } from "./models/Story";
 import type { Task, TaskStatus } from "./models/Task";
 import { ActiveProjectService } from "./services/ActiveProjectService";
+import { NotificationService } from "./services/NotificationService";
 import { ProjectService } from "./services/ProjectService";
 import { StoryService } from "./services/StoryService";
 import { TaskService } from "./services/TaskService";
@@ -13,14 +15,19 @@ const storyService = new StoryService();
 const taskService = new TaskService();
 const userService = new UserService();
 const activeProjectService = new ActiveProjectService();
+const notificationService = new NotificationService();
 
 const loggedInUser = userService.getLoggedInUser();
 const assignableUsers = userService.getAssignableUsers();
+const adminUsers = userService
+  .getUsers()
+  .filter((user) => user.role === "admin");
 
 let editingProjectId: string | null = null;
 let editingStoryId: string | null = null;
 let editingTaskId: string | null = null;
 let selectedTaskId: string | null = null;
+let selectedNotificationId: string | null = null;
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -29,11 +36,25 @@ app.innerHTML = `
     <header>
       <h1>ManageMe</h1>
       <p class="subtitle">Zarzadzaj projektami, historyjkami i zadaniami</p>
-      <p class="logged-user">Zalogowany: <strong id="logged-user-name"></strong></p>
+      <div class="header-toolbar">
+        <p class="logged-user">
+          Zalogowany:
+          <strong id="logged-user-name"></strong>
+          <button type="button" id="unread-counter-btn" class="notification-counter" aria-label="Przejdz do powiadomien">
+            🔔
+            <span id="unread-counter-value">0</span>
+          </button>
+        </p>
+        <nav class="header-nav">
+          <button type="button" id="menu-board-btn" class="nav-link active">Tablica</button>
+          <button type="button" id="menu-notifications-btn" class="nav-link">Powiadomienia</button>
+        </nav>
+      </div>
       <button type="button" id="theme-toggle-btn" class="theme-toggle">🌙 Ciemny</button>
     </header>
 
-    <section class="form-section">
+    <section id="board-view">
+      <section class="form-section">
       <h2 id="project-form-title">Nowy projekt</h2>
       <form id="project-form">
         <div class="form-group">
@@ -141,7 +162,39 @@ app.innerHTML = `
 
       <div id="task-board" class="task-board"></div>
       <div id="task-details" class="task-details"></div>
+      </section>
     </section>
+
+    <section id="notifications-view" class="notifications-view hidden">
+      <div class="notifications-header">
+        <h2>Wszystkie powiadomienia</h2>
+        <button type="button" id="notifications-back-btn" class="btn btn-secondary">Powrot do tablicy</button>
+      </div>
+      <div id="notifications-list" class="notifications-list"></div>
+    </section>
+
+    <section id="notification-details-view" class="notifications-view hidden">
+      <div class="notifications-header">
+        <h2>Szczegoly powiadomienia</h2>
+        <button type="button" id="notification-details-back-btn" class="btn btn-secondary">Wroc do listy</button>
+      </div>
+      <div id="notification-details" class="task-details"></div>
+    </section>
+
+    <div id="notification-modal-backdrop" class="modal-backdrop hidden">
+      <div class="notification-modal">
+        <h3 id="notification-modal-title"></h3>
+        <p id="notification-modal-message"></p>
+        <div class="notification-modal-meta">
+          <span id="notification-modal-priority"></span>
+          <span id="notification-modal-date"></span>
+        </div>
+        <div class="notification-modal-actions">
+          <button type="button" id="notification-modal-open-btn" class="btn btn-primary">Otworz</button>
+          <button type="button" id="notification-modal-close-btn" class="btn btn-secondary">Zamknij</button>
+        </div>
+      </div>
+    </div>
   </div>
 `;
 
@@ -209,9 +262,59 @@ const taskDetails = document.querySelector<HTMLDivElement>("#task-details")!;
 const themeToggleBtn = document.querySelector<HTMLButtonElement>(
   "#theme-toggle-btn",
 )!;
+const boardView = document.querySelector<HTMLElement>("#board-view")!;
+const notificationsView =
+  document.querySelector<HTMLElement>("#notifications-view")!;
+const notificationDetailsView = document.querySelector<HTMLElement>(
+  "#notification-details-view",
+)!;
+const notificationsList = document.querySelector<HTMLDivElement>(
+  "#notifications-list",
+)!;
+const notificationDetails = document.querySelector<HTMLDivElement>(
+  "#notification-details",
+)!;
+const menuBoardBtn = document.querySelector<HTMLButtonElement>("#menu-board-btn")!;
+const menuNotificationsBtn = document.querySelector<HTMLButtonElement>(
+  "#menu-notifications-btn",
+)!;
+const notificationsBackBtn = document.querySelector<HTMLButtonElement>(
+  "#notifications-back-btn",
+)!;
+const notificationDetailsBackBtn = document.querySelector<HTMLButtonElement>(
+  "#notification-details-back-btn",
+)!;
+const unreadCounterBtn = document.querySelector<HTMLButtonElement>(
+  "#unread-counter-btn",
+)!;
+const unreadCounterValue = document.querySelector<HTMLSpanElement>(
+  "#unread-counter-value",
+)!;
+const notificationModalBackdrop = document.querySelector<HTMLDivElement>(
+  "#notification-modal-backdrop",
+)!;
+const notificationModalTitle = document.querySelector<HTMLHeadingElement>(
+  "#notification-modal-title",
+)!;
+const notificationModalMessage = document.querySelector<HTMLParagraphElement>(
+  "#notification-modal-message",
+)!;
+const notificationModalPriority = document.querySelector<HTMLSpanElement>(
+  "#notification-modal-priority",
+)!;
+const notificationModalDate = document.querySelector<HTMLSpanElement>(
+  "#notification-modal-date",
+)!;
+const notificationModalOpenBtn = document.querySelector<HTMLButtonElement>(
+  "#notification-modal-open-btn",
+)!;
+const notificationModalCloseBtn = document.querySelector<HTMLButtonElement>(
+  "#notification-modal-close-btn",
+)!;
 
 const THEME_STORAGE_KEY = "manageme-theme";
 type Theme = "light" | "dark";
+let activeModalNotificationId: string | null = null;
 
 function updateThemeToggleLabel(theme: Theme): void {
   themeToggleBtn.textContent = theme === "dark" ? "☀️ Jasny" : "🌙 Ciemny";
@@ -292,12 +395,201 @@ function getStoryName(storyId: string): string {
   return story ? story.name : "Nieznana historyjka";
 }
 
+function getUserFullName(userId: string): string {
+  const user = userService.getUserById(userId);
+  return user ? `${user.firstName} ${user.lastName}` : "Nieznany uzytkownik";
+}
+
 function formatDate(dateString: string | null): string {
   if (!dateString) {
     return "-";
   }
 
   return new Date(dateString).toLocaleString("pl-PL");
+}
+
+function formatNotificationPriority(priority: Notification["priority"]): string {
+  if (priority === "high") {
+    return "Wysoki";
+  }
+  if (priority === "medium") {
+    return "Sredni";
+  }
+  return "Niski";
+}
+
+function getMyNotifications(): Notification[] {
+  return notificationService.getNotificationsByRecipient(loggedInUser.id);
+}
+
+function updateUnreadCounter(): void {
+  unreadCounterValue.textContent = String(
+    notificationService.getUnreadCountByRecipient(loggedInUser.id),
+  );
+}
+
+function markNotificationAsRead(notificationId: string): void {
+  notificationService.markAsRead(notificationId);
+  updateUnreadCounter();
+  renderNotifications();
+  renderNotificationDetails();
+}
+
+function openNotificationDetails(notificationId: string): void {
+  selectedNotificationId = notificationId;
+  notificationService.markAsRead(notificationId);
+  updateUnreadCounter();
+  setActiveView("notification-details");
+  renderNotifications();
+  renderNotificationDetails();
+}
+
+function renderNotifications(): void {
+  const notifications = getMyNotifications();
+  if (notifications.length === 0) {
+    notificationsList.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">🔔</span>
+        <p>Brak powiadomien.</p>
+      </div>
+    `;
+    return;
+  }
+
+  notificationsList.innerHTML = notifications
+    .map(
+      (notification) => `
+      <article class="notification-card ${notification.isRead ? "notification-read" : "notification-unread"}">
+        <h3>${escapeHtml(notification.title)}</h3>
+        <p>${escapeHtml(notification.message)}</p>
+        <div class="notification-meta">
+          <span>Priorytet: ${formatNotificationPriority(notification.priority)}</span>
+          <span>Data: ${formatDate(notification.date)}</span>
+        </div>
+        <div class="story-actions">
+          <button type="button" class="btn btn-select btn-notification-details" data-id="${notification.id}">Szczegoly</button>
+          ${
+            notification.isRead
+              ? ""
+              : `<button type="button" class="btn btn-primary btn-notification-read" data-id="${notification.id}">Oznacz jako przeczytane</button>`
+          }
+        </div>
+      </article>
+    `,
+    )
+    .join("");
+
+  notificationsList
+    .querySelectorAll(".btn-notification-details")
+    .forEach((button) => {
+      button.addEventListener("click", () =>
+        openNotificationDetails((button as HTMLElement).dataset.id!),
+      );
+    });
+
+  notificationsList.querySelectorAll(".btn-notification-read").forEach((button) => {
+    button.addEventListener("click", () =>
+      markNotificationAsRead((button as HTMLElement).dataset.id!),
+    );
+  });
+}
+
+function renderNotificationDetails(): void {
+  const notification = selectedNotificationId
+    ? notificationService.getNotificationById(selectedNotificationId)
+    : null;
+
+  if (!notification || notification.recipientId !== loggedInUser.id) {
+    notificationDetails.innerHTML = `
+      <h3>Szczegoly powiadomienia</h3>
+      <p class="column-empty">Wybierz powiadomienie z listy.</p>
+    `;
+    return;
+  }
+
+  notificationDetails.innerHTML = `
+    <h3>${escapeHtml(notification.title)}</h3>
+    <div class="details-grid">
+      <p><strong>Priorytet:</strong> ${formatNotificationPriority(notification.priority)}</p>
+      <p><strong>Data:</strong> ${formatDate(notification.date)}</p>
+      <p><strong>Status:</strong> ${notification.isRead ? "Przeczytane" : "Nieprzeczytane"}</p>
+    </div>
+    <p>${escapeHtml(notification.message)}</p>
+    ${
+      notification.isRead
+        ? ""
+        : `<div class="form-actions"><button type="button" id="notification-detail-read-btn" class="btn btn-primary">Oznacz jako przeczytane</button></div>`
+    }
+  `;
+
+  const detailReadBtn = document.querySelector<HTMLButtonElement>(
+    "#notification-detail-read-btn",
+  );
+  detailReadBtn?.addEventListener("click", () =>
+    markNotificationAsRead(notification.id),
+  );
+}
+
+function showNotificationModal(notification: Notification): void {
+  activeModalNotificationId = notification.id;
+  notificationModalTitle.textContent = notification.title;
+  notificationModalMessage.textContent = notification.message;
+  notificationModalPriority.textContent = `Priorytet: ${formatNotificationPriority(
+    notification.priority,
+  )}`;
+  notificationModalDate.textContent = formatDate(notification.date);
+  notificationModalBackdrop.classList.remove("hidden");
+}
+
+function closeNotificationModal(): void {
+  activeModalNotificationId = null;
+  notificationModalBackdrop.classList.add("hidden");
+}
+
+function sendNotification(input: {
+  title: string;
+  message: string;
+  priority: Notification["priority"];
+  recipientIds: string[];
+}): void {
+  const recipientIds = [...new Set(input.recipientIds)];
+  if (recipientIds.length === 0) {
+    return;
+  }
+
+  const created = notificationService.createNotificationsForRecipients({
+    title: input.title,
+    message: input.message,
+    priority: input.priority,
+    recipientIds,
+  });
+
+  const modalNotification = created.find(
+    (notification) =>
+      notification.recipientId === loggedInUser.id &&
+      (notification.priority === "medium" || notification.priority === "high"),
+  );
+
+  if (modalNotification) {
+    showNotificationModal(modalNotification);
+  }
+
+  updateUnreadCounter();
+  renderNotifications();
+  renderNotificationDetails();
+}
+
+function setActiveView(
+  view: "board" | "notifications" | "notification-details",
+): void {
+  boardView.classList.toggle("hidden", view !== "board");
+  notificationsView.classList.toggle("hidden", view !== "notifications");
+  notificationDetailsView.classList.toggle(
+    "hidden",
+    view !== "notification-details",
+  );
+  menuBoardBtn.classList.toggle("active", view === "board");
+  menuNotificationsBtn.classList.toggle("active", view !== "board");
 }
 
 function setActiveProject(projectId: string): void {
@@ -766,6 +1058,16 @@ function deleteTask(id: string): void {
   }
 
   if (task) {
+    const story = storyService.getStoryById(task.storyId);
+    if (story) {
+      sendNotification({
+        title: "Usunieto zadanie z historyjki",
+        message: `Zadanie "${task.name}" zostalo usuniete z historyjki "${story.name}".`,
+        priority: "medium",
+        recipientIds: [story.ownerId],
+      });
+    }
+
     const storyTasks = taskService.getTasksByStory(task.storyId);
     if (
       storyTasks.length > 0 &&
@@ -799,6 +1101,7 @@ function assignSelectedTask(taskId: string): void {
     return;
   }
 
+  const previousTask = taskService.getTaskById(taskId);
   const task = taskService.assignTask(taskId, assigneeId);
   if (!task) {
     alert("Nie udalo sie przypisac zadania.");
@@ -806,8 +1109,30 @@ function assignSelectedTask(taskId: string): void {
   }
 
   const story = storyService.getStoryById(task.storyId);
+  const assigneeName = getUserFullName(assigneeId);
+  sendNotification({
+    title: "Przypisano Cie do zadania",
+    message: `Zadanie "${task.name}" zostalo przypisane do ${assigneeName}.`,
+    priority: "high",
+    recipientIds: [assigneeId],
+  });
+
   if (story && story.status === "todo") {
     storyService.updateStoryStatus(story.id, "doing");
+  }
+
+  if (
+    story &&
+    previousTask &&
+    previousTask.status !== task.status &&
+    task.status === "doing"
+  ) {
+    sendNotification({
+      title: "Zmiana statusu zadania",
+      message: `Zadanie "${task.name}" zmienilo status na doing.`,
+      priority: "low",
+      recipientIds: [story.ownerId],
+    });
   }
 
   renderStories();
@@ -842,6 +1167,16 @@ function finishSelectedTask(taskId: string): void {
   if (!updatedTask) {
     alert("Nie udalo sie zamknac zadania.");
     return;
+  }
+
+  const story = storyService.getStoryById(updatedTask.storyId);
+  if (story) {
+    sendNotification({
+      title: "Zmiana statusu zadania",
+      message: `Zadanie "${updatedTask.name}" zmienilo status na done.`,
+      priority: "medium",
+      recipientIds: [story.ownerId],
+    });
   }
 
   const storyTasks = taskService.getTasksByStory(task.storyId);
@@ -879,6 +1214,12 @@ projectForm.addEventListener("submit", (event) => {
     cancelProjectEdit();
   } else {
     const created = projectService.createProject(name, description);
+    sendNotification({
+      title: "Utworzono nowy projekt",
+      message: `Dodano projekt "${created.name}".`,
+      priority: "high",
+      recipientIds: adminUsers.map((user) => user.id),
+    });
     projectForm.reset();
 
     if (!getActiveProjectId()) {
@@ -985,6 +1326,15 @@ taskForm.addEventListener("submit", (event) => {
       projectId: activeProject.id,
       estimatedHours,
     });
+    const taskStory = storyService.getStoryById(created.storyId);
+    if (taskStory) {
+      sendNotification({
+        title: "Nowe zadanie w historyjce",
+        message: `Dodano zadanie "${created.name}" w historyjce "${taskStory.name}".`,
+        priority: "medium",
+        recipientIds: [taskStory.ownerId],
+      });
+    }
     selectedTaskId = created.id;
     cancelTaskEdit();
   }
@@ -996,6 +1346,33 @@ taskForm.addEventListener("submit", (event) => {
 projectCancelBtn.addEventListener("click", cancelProjectEdit);
 storyCancelBtn.addEventListener("click", cancelStoryEdit);
 taskCancelBtn.addEventListener("click", cancelTaskEdit);
+menuBoardBtn.addEventListener("click", () => setActiveView("board"));
+menuNotificationsBtn.addEventListener("click", () => {
+  renderNotifications();
+  setActiveView("notifications");
+});
+notificationsBackBtn.addEventListener("click", () => setActiveView("board"));
+notificationDetailsBackBtn.addEventListener("click", () =>
+  setActiveView("notifications"),
+);
+unreadCounterBtn.addEventListener("click", () => {
+  renderNotifications();
+  setActiveView("notifications");
+});
+notificationModalCloseBtn.addEventListener("click", closeNotificationModal);
+notificationModalBackdrop.addEventListener("click", (event) => {
+  if (event.target === notificationModalBackdrop) {
+    closeNotificationModal();
+  }
+});
+notificationModalOpenBtn.addEventListener("click", () => {
+  if (!activeModalNotificationId) {
+    return;
+  }
+  const notificationId = activeModalNotificationId;
+  closeNotificationModal();
+  openNotificationDetails(notificationId);
+});
 
 loggedUserName.textContent = `${loggedInUser.firstName} ${loggedInUser.lastName} (${loggedInUser.role})`;
 
@@ -1005,3 +1382,7 @@ renderStories();
 renderTaskStoryOptions();
 renderTasks();
 renderTaskDetails();
+renderNotifications();
+renderNotificationDetails();
+updateUnreadCounter();
+setActiveView("board");
