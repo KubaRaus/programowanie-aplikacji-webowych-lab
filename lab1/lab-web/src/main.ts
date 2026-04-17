@@ -3,6 +3,8 @@ import type { Notification } from "./models/Notification";
 import type { Project } from "./models/Project";
 import type { Story, StoryPriority, StoryStatus } from "./models/Story";
 import type { Task, TaskStatus } from "./models/Task";
+import type { User, UserRole } from "./models/User";
+import { APP_CONFIG } from "./config";
 import { ActiveProjectService } from "./services/ActiveProjectService";
 import { NotificationService } from "./services/NotificationService";
 import { ProjectService } from "./services/ProjectService";
@@ -17,11 +19,7 @@ const userService = new UserService();
 const activeProjectService = new ActiveProjectService();
 const notificationService = new NotificationService();
 
-const loggedInUser = userService.getLoggedInUser();
-const assignableUsers = userService.getAssignableUsers();
-const adminUsers = userService
-  .getUsers()
-  .filter((user) => user.role === "admin");
+let loggedInUser: User | null = userService.getLoggedInUser();
 
 let editingProjectId: string | null = null;
 let editingStoryId: string | null = null;
@@ -32,7 +30,23 @@ let selectedNotificationId: string | null = null;
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
 app.innerHTML = `
-  <div class="container">
+  <div id="login-view" class="auth-view hidden">
+    <h1>ManageMe</h1>
+    <p class="subtitle">Zaloguj sie przez Google, aby kontynuowac.</p>
+    <div id="google-login-button" class="google-login"></div>
+    <p id="login-error" class="auth-message hidden"></p>
+    <p class="auth-hint">
+      Super admin email: <strong>${escapeHtml(APP_CONFIG.superAdminEmail)}</strong>
+    </p>
+  </div>
+
+  <div id="blocked-view" class="auth-view hidden">
+    <h1>Konto zablokowane</h1>
+    <p class="subtitle">To konto nie ma dostepu do aplikacji. Skontaktuj sie z administratorem.</p>
+    <button type="button" id="blocked-logout-btn" class="btn btn-secondary">Wyloguj</button>
+  </div>
+
+  <div id="app-shell" class="container hidden">
     <header>
       <h1>ManageMe</h1>
       <p class="subtitle">Zarzadzaj projektami, historyjkami i zadaniami</p>
@@ -48,10 +62,21 @@ app.innerHTML = `
         <nav class="header-nav">
           <button type="button" id="menu-board-btn" class="nav-link active">Tablica</button>
           <button type="button" id="menu-notifications-btn" class="nav-link">Powiadomienia</button>
+          <button type="button" id="menu-users-btn" class="nav-link hidden">Uzytkownicy</button>
         </nav>
       </div>
-      <button type="button" id="theme-toggle-btn" class="theme-toggle">🌙 Ciemny</button>
+      <div class="header-actions">
+        <button type="button" id="theme-toggle-btn" class="theme-toggle">🌙 Ciemny</button>
+        <button type="button" id="logout-btn" class="btn btn-secondary">Wyloguj</button>
+      </div>
     </header>
+
+    <section id="guest-pending-view" class="notifications-view hidden">
+      <div class="notifications-header">
+        <h2>Oczekiwanie na zatwierdzenie konta</h2>
+      </div>
+      <p class="column-empty">Twoje konto ma role goscia. Administrator musi zmienic role, aby odblokowac dostep do aplikacji.</p>
+    </section>
 
     <section id="board-view">
       <section class="form-section">
@@ -181,6 +206,13 @@ app.innerHTML = `
       <div id="notification-details" class="task-details"></div>
     </section>
 
+    <section id="users-view" class="notifications-view hidden">
+      <div class="notifications-header">
+        <h2>Lista uzytkownikow</h2>
+      </div>
+      <div id="users-list" class="users-list"></div>
+    </section>
+
     <div id="notification-modal-backdrop" class="modal-backdrop hidden">
       <div class="notification-modal">
         <h3 id="notification-modal-title"></h3>
@@ -262,12 +294,25 @@ const taskDetails = document.querySelector<HTMLDivElement>("#task-details")!;
 const themeToggleBtn = document.querySelector<HTMLButtonElement>(
   "#theme-toggle-btn",
 )!;
+const logoutBtn = document.querySelector<HTMLButtonElement>("#logout-btn")!;
+const loginView = document.querySelector<HTMLElement>("#login-view")!;
+const blockedView = document.querySelector<HTMLElement>("#blocked-view")!;
+const blockedLogoutBtn = document.querySelector<HTMLButtonElement>(
+  "#blocked-logout-btn",
+)!;
+const loginError = document.querySelector<HTMLParagraphElement>("#login-error")!;
+const googleLoginButton = document.querySelector<HTMLDivElement>(
+  "#google-login-button",
+)!;
+const appShell = document.querySelector<HTMLElement>("#app-shell")!;
+const guestPendingView = document.querySelector<HTMLElement>("#guest-pending-view")!;
 const boardView = document.querySelector<HTMLElement>("#board-view")!;
 const notificationsView =
   document.querySelector<HTMLElement>("#notifications-view")!;
 const notificationDetailsView = document.querySelector<HTMLElement>(
   "#notification-details-view",
 )!;
+const usersView = document.querySelector<HTMLElement>("#users-view")!;
 const notificationsList = document.querySelector<HTMLDivElement>(
   "#notifications-list",
 )!;
@@ -278,6 +323,7 @@ const menuBoardBtn = document.querySelector<HTMLButtonElement>("#menu-board-btn"
 const menuNotificationsBtn = document.querySelector<HTMLButtonElement>(
   "#menu-notifications-btn",
 )!;
+const menuUsersBtn = document.querySelector<HTMLButtonElement>("#menu-users-btn")!;
 const notificationsBackBtn = document.querySelector<HTMLButtonElement>(
   "#notifications-back-btn",
 )!;
@@ -311,10 +357,13 @@ const notificationModalOpenBtn = document.querySelector<HTMLButtonElement>(
 const notificationModalCloseBtn = document.querySelector<HTMLButtonElement>(
   "#notification-modal-close-btn",
 )!;
+const usersList = document.querySelector<HTMLDivElement>("#users-list")!;
 
 const THEME_STORAGE_KEY = "manageme-theme";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? "";
 type Theme = "light" | "dark";
 let activeModalNotificationId: string | null = null;
+let googleLoginInitRetries = 0;
 
 function updateThemeToggleLabel(theme: Theme): void {
   themeToggleBtn.textContent = theme === "dark" ? "☀️ Jasny" : "🌙 Ciemny";
@@ -354,6 +403,193 @@ function initThemeToggle(): void {
     }
 
     applyTheme(event.matches ? "dark" : "light");
+  });
+}
+
+function requireLoggedInUser(): User {
+  if (!loggedInUser) {
+    throw new Error("Brak zalogowanego uzytkownika.");
+  }
+  return loggedInUser;
+}
+
+function getAssignableUsers(): User[] {
+  return userService.getAssignableUsers();
+}
+
+function getAdminUsers(): User[] {
+  return userService.getAdminUsers().filter((user) => !user.isBlocked);
+}
+
+function getRoleLabel(role: UserRole): string {
+  if (role === "admin") {
+    return "Admin";
+  }
+  if (role === "developer") {
+    return "Developer";
+  }
+  if (role === "devops") {
+    return "DevOps";
+  }
+  return "Gosc";
+}
+
+function parseJwtPayload(token: string): Record<string, unknown> {
+  const payload = token.split(".")[1];
+  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = atob(base64);
+  return JSON.parse(decoded) as Record<string, unknown>;
+}
+
+function splitName(fullName: string): { firstName: string; lastName: string } {
+  const normalized = fullName.trim();
+  if (!normalized) {
+    return { firstName: "Uzytkownik", lastName: "Google" };
+  }
+  const parts = normalized.split(/\s+/);
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" ") || "Google",
+  };
+}
+
+function setLoginError(message: string | null): void {
+  if (!message) {
+    loginError.textContent = "";
+    loginError.classList.add("hidden");
+    return;
+  }
+  loginError.textContent = message;
+  loginError.classList.remove("hidden");
+}
+
+function syncLoggedUserName(): void {
+  const user = requireLoggedInUser();
+  loggedUserName.textContent = `${user.firstName} ${user.lastName} (${getRoleLabel(user.role)})`;
+}
+
+function sendNewAccountNotification(newUser: User): void {
+  const adminRecipientIds = getAdminUsers()
+    .filter((admin) => admin.id !== newUser.id)
+    .map((admin) => admin.id);
+  if (adminRecipientIds.length === 0) {
+    return;
+  }
+  sendNotification({
+    title: "Nowe konto w systemie",
+    message: `Utworzono konto: ${newUser.firstName} ${newUser.lastName} (${newUser.email}).`,
+    priority: "high",
+    recipientIds: adminRecipientIds,
+  });
+}
+
+function applyAccessMode(): void {
+  const user = requireLoggedInUser();
+  const isAdmin = user.role === "admin";
+  const isGuest = user.role === "guest";
+
+  loginView.classList.add("hidden");
+  blockedView.classList.add("hidden");
+  appShell.classList.remove("hidden");
+  menuUsersBtn.classList.toggle("hidden", !isAdmin);
+  menuBoardBtn.classList.toggle("hidden", isGuest);
+  menuNotificationsBtn.classList.toggle("hidden", isGuest);
+  unreadCounterBtn.classList.toggle("hidden", isGuest);
+  guestPendingView.classList.toggle("hidden", !isGuest);
+  boardView.classList.toggle("hidden", isGuest);
+  notificationsView.classList.toggle("hidden", isGuest);
+  notificationDetailsView.classList.toggle("hidden", true);
+  usersView.classList.toggle("hidden", true);
+
+  if (isGuest) {
+    menuBoardBtn.classList.remove("active");
+    menuNotificationsBtn.classList.remove("active");
+    menuUsersBtn.classList.remove("active");
+    return;
+  }
+
+  setActiveView("board");
+}
+
+function logoutAndShowLogin(): void {
+  userService.logout();
+  loggedInUser = null;
+  appShell.classList.add("hidden");
+  blockedView.classList.add("hidden");
+  loginView.classList.remove("hidden");
+  setLoginError(null);
+  initGoogleLogin();
+}
+
+function handleGoogleCredential(response: GoogleCredentialResponse): void {
+  try {
+    const payload = parseJwtPayload(response.credential);
+    const email = String(payload.email ?? "").trim().toLowerCase();
+    if (!email) {
+      throw new Error("Brak emaila w odpowiedzi dostawcy OAuth.");
+    }
+    const payloadName = String(payload.name ?? "");
+    const names = splitName(payloadName);
+    const firstName = String(payload.given_name ?? names.firstName);
+    const lastName = String(payload.family_name ?? names.lastName);
+    const result = userService.loginWithOAuthProfile(
+      { email, firstName, lastName },
+      APP_CONFIG.superAdminEmail,
+    );
+    loggedInUser = result.user;
+    if (result.isNewUser) {
+      sendNewAccountNotification(result.user);
+    }
+    if (result.user.isBlocked) {
+      appShell.classList.add("hidden");
+      loginView.classList.add("hidden");
+      blockedView.classList.remove("hidden");
+      return;
+    }
+    syncLoggedUserName();
+    applyAccessMode();
+    updateUnreadCounter();
+    renderNotifications();
+    renderNotificationDetails();
+    renderUsers();
+    setLoginError(null);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Nie udalo sie zalogowac.";
+    setLoginError(message);
+  }
+}
+
+function initGoogleLogin(): void {
+  if (!GOOGLE_CLIENT_ID) {
+    setLoginError(
+      "Brak VITE_GOOGLE_CLIENT_ID w konfiguracji. Dodaj zmienna srodowiskowa.",
+    );
+    return;
+  }
+
+  if (!window.google?.accounts?.id) {
+    if (googleLoginInitRetries < 8) {
+      googleLoginInitRetries += 1;
+      setTimeout(initGoogleLogin, 300);
+      return;
+    }
+    setLoginError("Nie mozna zaladowac biblioteki Google OAuth.");
+    return;
+  }
+
+  googleLoginInitRetries = 0;
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+  });
+  googleLoginButton.innerHTML = "";
+  window.google.accounts.id.renderButton(googleLoginButton, {
+    type: "standard",
+    size: "large",
+    text: "signin_with",
+    shape: "pill",
+    width: 260,
   });
 }
 
@@ -419,12 +655,12 @@ function formatNotificationPriority(priority: Notification["priority"]): string 
 }
 
 function getMyNotifications(): Notification[] {
-  return notificationService.getNotificationsByRecipient(loggedInUser.id);
+  return notificationService.getNotificationsByRecipient(requireLoggedInUser().id);
 }
 
 function updateUnreadCounter(): void {
   unreadCounterValue.textContent = String(
-    notificationService.getUnreadCountByRecipient(loggedInUser.id),
+    notificationService.getUnreadCountByRecipient(requireLoggedInUser().id),
   );
 }
 
@@ -499,7 +735,7 @@ function renderNotificationDetails(): void {
     ? notificationService.getNotificationById(selectedNotificationId)
     : null;
 
-  if (!notification || notification.recipientId !== loggedInUser.id) {
+  if (!notification || notification.recipientId !== requireLoggedInUser().id) {
     notificationDetails.innerHTML = `
       <h3>Szczegoly powiadomienia</h3>
       <p class="column-empty">Wybierz powiadomienie z listy.</p>
@@ -528,6 +764,88 @@ function renderNotificationDetails(): void {
   detailReadBtn?.addEventListener("click", () =>
     markNotificationAsRead(notification.id),
   );
+}
+
+function renderUsers(): void {
+  const currentUser = requireLoggedInUser();
+  if (currentUser.role !== "admin") {
+    usersList.innerHTML = `
+      <p class="column-empty">Dostep tylko dla administratorow.</p>
+    `;
+    return;
+  }
+
+  const users = userService.getUsers();
+  if (users.length === 0) {
+    usersList.innerHTML = `
+      <p class="column-empty">Brak uzytkownikow.</p>
+    `;
+    return;
+  }
+
+  usersList.innerHTML = users
+    .map(
+      (user) => `
+      <article class="user-card ${user.isBlocked ? "user-card-blocked" : ""}">
+        <div>
+          <h3>${escapeHtml(user.firstName)} ${escapeHtml(user.lastName)}</h3>
+          <p>${escapeHtml(user.email)}</p>
+        </div>
+        <div class="user-actions">
+          <label>
+            Rola
+            <select class="user-role-select" data-id="${user.id}" ${user.id === currentUser.id ? "disabled" : ""}>
+              <option value="guest" ${user.role === "guest" ? "selected" : ""}>Gosc</option>
+              <option value="developer" ${user.role === "developer" ? "selected" : ""}>Developer</option>
+              <option value="devops" ${user.role === "devops" ? "selected" : ""}>DevOps</option>
+              <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+            </select>
+          </label>
+          <button type="button" class="btn ${user.isBlocked ? "btn-select" : "btn-delete"} btn-user-block" data-id="${user.id}" ${user.id === currentUser.id ? "disabled" : ""}>
+            ${user.isBlocked ? "Odblokuj" : "Zablokuj"}
+          </button>
+        </div>
+      </article>
+    `,
+    )
+    .join("");
+
+  usersList.querySelectorAll(".user-role-select").forEach((element) => {
+    element.addEventListener("change", () => {
+      const select = element as HTMLSelectElement;
+      const userId = select.dataset.id ?? "";
+      const role = select.value as UserRole;
+      const updated = userService.updateUserRole(userId, role);
+      if (!updated) {
+        return;
+      }
+      if (loggedInUser && loggedInUser.id === updated.id) {
+        loggedInUser = updated;
+      }
+      renderUsers();
+      syncLoggedUserName();
+      applyAccessMode();
+    });
+  });
+
+  usersList.querySelectorAll(".btn-user-block").forEach((button) => {
+    button.addEventListener("click", () => {
+      const userId = (button as HTMLElement).dataset.id ?? "";
+      const target = userService.getUserById(userId);
+      if (!target) {
+        return;
+      }
+      const updated = userService.setUserBlocked(userId, !target.isBlocked);
+      if (!updated) {
+        return;
+      }
+      if (loggedInUser && loggedInUser.id === updated.id) {
+        loggedInUser = updated;
+      }
+      renderUsers();
+      applyAccessMode();
+    });
+  });
 }
 
 function showNotificationModal(notification: Notification): void {
@@ -566,7 +884,7 @@ function sendNotification(input: {
 
   const modalNotification = created.find(
     (notification) =>
-      notification.recipientId === loggedInUser.id &&
+      notification.recipientId === requireLoggedInUser().id &&
       (notification.priority === "medium" || notification.priority === "high"),
   );
 
@@ -580,16 +898,31 @@ function sendNotification(input: {
 }
 
 function setActiveView(
-  view: "board" | "notifications" | "notification-details",
+  view: "board" | "notifications" | "notification-details" | "users",
 ): void {
+  if (requireLoggedInUser().role === "guest") {
+    guestPendingView.classList.remove("hidden");
+    boardView.classList.add("hidden");
+    notificationsView.classList.add("hidden");
+    notificationDetailsView.classList.add("hidden");
+    usersView.classList.add("hidden");
+    return;
+  }
+
   boardView.classList.toggle("hidden", view !== "board");
   notificationsView.classList.toggle("hidden", view !== "notifications");
   notificationDetailsView.classList.toggle(
     "hidden",
     view !== "notification-details",
   );
+  usersView.classList.toggle("hidden", view !== "users");
+  guestPendingView.classList.add("hidden");
   menuBoardBtn.classList.toggle("active", view === "board");
-  menuNotificationsBtn.classList.toggle("active", view !== "board");
+  menuNotificationsBtn.classList.toggle(
+    "active",
+    view === "notifications" || view === "notification-details",
+  );
+  menuUsersBtn.classList.toggle("active", view === "users");
 }
 
 function setActiveProject(projectId: string): void {
@@ -983,7 +1316,7 @@ function renderTaskDetails(): void {
       <div class="details-row">
         <select id="details-assignee">
           <option value="">Wybierz osobe</option>
-          ${assignableUsers
+          ${getAssignableUsers()
             .map(
               (user) =>
                 `<option value="${user.id}" ${task.assigneeId === user.id ? "selected" : ""}>${user.firstName} ${user.lastName} (${user.role})</option>`,
@@ -1218,7 +1551,7 @@ projectForm.addEventListener("submit", (event) => {
       title: "Utworzono nowy projekt",
       message: `Dodano projekt "${created.name}".`,
       priority: "high",
-      recipientIds: adminUsers.map((user) => user.id),
+      recipientIds: getAdminUsers().map((user) => user.id),
     });
     projectForm.reset();
 
@@ -1257,7 +1590,7 @@ storyForm.addEventListener("submit", (event) => {
       description,
       priority,
       status,
-      ownerId: loggedInUser.id,
+      ownerId: requireLoggedInUser().id,
     });
     cancelStoryEdit();
   } else {
@@ -1267,7 +1600,7 @@ storyForm.addEventListener("submit", (event) => {
       priority,
       status,
       projectId: activeProject.id,
-      ownerId: loggedInUser.id,
+      ownerId: requireLoggedInUser().id,
     });
     cancelStoryEdit();
   }
@@ -1351,6 +1684,10 @@ menuNotificationsBtn.addEventListener("click", () => {
   renderNotifications();
   setActiveView("notifications");
 });
+menuUsersBtn.addEventListener("click", () => {
+  renderUsers();
+  setActiveView("users");
+});
 notificationsBackBtn.addEventListener("click", () => setActiveView("board"));
 notificationDetailsBackBtn.addEventListener("click", () =>
   setActiveView("notifications"),
@@ -1373,16 +1710,29 @@ notificationModalOpenBtn.addEventListener("click", () => {
   closeNotificationModal();
   openNotificationDetails(notificationId);
 });
-
-loggedUserName.textContent = `${loggedInUser.firstName} ${loggedInUser.lastName} (${loggedInUser.role})`;
+logoutBtn.addEventListener("click", logoutAndShowLogin);
+blockedLogoutBtn.addEventListener("click", logoutAndShowLogin);
 
 initThemeToggle();
-renderProjects();
-renderStories();
-renderTaskStoryOptions();
-renderTasks();
-renderTaskDetails();
-renderNotifications();
-renderNotificationDetails();
-updateUnreadCounter();
-setActiveView("board");
+if (!loggedInUser) {
+  appShell.classList.add("hidden");
+  blockedView.classList.add("hidden");
+  loginView.classList.remove("hidden");
+  initGoogleLogin();
+} else if (loggedInUser.isBlocked) {
+  appShell.classList.add("hidden");
+  loginView.classList.add("hidden");
+  blockedView.classList.remove("hidden");
+} else {
+  syncLoggedUserName();
+  renderProjects();
+  renderStories();
+  renderTaskStoryOptions();
+  renderTasks();
+  renderTaskDetails();
+  renderNotifications();
+  renderNotificationDetails();
+  updateUnreadCounter();
+  renderUsers();
+  applyAccessMode();
+}
