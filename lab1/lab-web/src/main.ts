@@ -9,6 +9,7 @@ import { ActiveProjectService } from "./services/ActiveProjectService";
 import { NotificationService } from "./services/NotificationService";
 import { ProjectService } from "./services/ProjectService";
 import { StoryService } from "./services/StoryService";
+import { appStorage } from "./services/storage/AppStorage";
 import { TaskService } from "./services/TaskService";
 import { UserService } from "./services/UserService";
 
@@ -18,6 +19,7 @@ const taskService = new TaskService();
 const userService = new UserService();
 const activeProjectService = new ActiveProjectService();
 const notificationService = new NotificationService();
+await appStorage.initialize();
 
 let loggedInUser: User | null = userService.getLoggedInUser();
 

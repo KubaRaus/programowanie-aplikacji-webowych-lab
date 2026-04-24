@@ -1,16 +1,16 @@
 import type { StoryPriority } from "../models/Story";
 import type { Task } from "../models/Task";
+import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = "manageme_tasks";
 
 export class TaskService {
   private getAll(): Task[] {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    return appStorage.getCollection<Task>(STORAGE_KEY);
   }
 
   private saveAll(tasks: Task[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    appStorage.setCollection(STORAGE_KEY, tasks);
   }
 
   private generateId(): string {

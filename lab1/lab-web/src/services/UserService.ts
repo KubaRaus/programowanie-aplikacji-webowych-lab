@@ -1,4 +1,5 @@
 import type { User } from "../models/User";
+import { appStorage } from "./storage/AppStorage";
 
 const USERS_STORAGE_KEY = "manageme_users";
 const LOGGED_USER_ID_STORAGE_KEY = "manageme_logged_user_id";
@@ -11,12 +12,11 @@ type OAuthProfile = {
 
 export class UserService {
   private getAll(): User[] {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as User[]) : [];
+    return appStorage.getCollection<User>(USERS_STORAGE_KEY);
   }
 
   private saveAll(users: User[]): void {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    appStorage.setCollection(USERS_STORAGE_KEY, users);
   }
 
   private toCanonicalEmail(email: string): string {

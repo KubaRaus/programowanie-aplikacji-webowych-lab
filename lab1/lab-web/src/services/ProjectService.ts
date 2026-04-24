@@ -1,15 +1,15 @@
 import type { Project } from '../models/Project';
+import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = 'manageme_projects';
 
 export class ProjectService {
   private getAll(): Project[] {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    return appStorage.getCollection<Project>(STORAGE_KEY);
   }
 
   private saveAll(projects: Project[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    appStorage.setCollection(STORAGE_KEY, projects);
   }
 
   private generateId(): string {

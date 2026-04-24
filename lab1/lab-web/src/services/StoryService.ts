@@ -1,15 +1,15 @@
 import type { Story, StoryPriority, StoryStatus } from "../models/Story";
+import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = "manageme_stories";
 
 export class StoryService {
   private getAll(): Story[] {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    return appStorage.getCollection<Story>(STORAGE_KEY);
   }
 
   private saveAll(stories: Story[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
+    appStorage.setCollection(STORAGE_KEY, stories);
   }
 
   private generateId(): string {

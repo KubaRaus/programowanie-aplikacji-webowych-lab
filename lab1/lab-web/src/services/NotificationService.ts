@@ -3,17 +3,17 @@ import type {
   NotificationPriority,
   UserID,
 } from "../models/Notification";
+import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = "manageme_notifications";
 
 export class NotificationService {
   private getAll(): Notification[] {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? (JSON.parse(data) as Notification[]) : [];
+    return appStorage.getCollection<Notification>(STORAGE_KEY);
   }
 
   private saveAll(notifications: Notification[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+    appStorage.setCollection(STORAGE_KEY, notifications);
   }
 
   private generateId(): string {
