@@ -429,6 +429,9 @@ async function handleGoogleCredential(
     loggedInUser = result.user;
     if (result.isNewUser) {
       sendNewAccountNotification(result.user);
+      if (!(await ensureStorageSynced())) {
+        return;
+      }
     }
     if (result.user.isBlocked) {
       appShell.classList.add("hidden");

@@ -204,6 +204,29 @@ test("admin moze zarzadzac lista uzytkownikow", async ({ page }) => {
   await expect(roleSelect).toHaveValue("devops");
 });
 
+test("powiadomienie high otwiera modal i mozna je oznaczyc jako przeczytane", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.fill("#project-name", "Projekt z powiadomieniem");
+  await page.fill("#project-desc", "Sprawdzenie modala");
+  await page.click("#project-submit-btn");
+
+  await expect(page.locator("#notification-modal-close-btn")).toBeVisible();
+  await expect(page.locator("#unread-counter-value")).toHaveText("1");
+
+  await page.click("#notification-modal-open-btn");
+  await expect(page.locator("#notification-details-view")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#unread-counter-value")).toHaveText("0");
+
+  await page.click("#notification-details-back-btn");
+  await expect(page.locator("#notifications-view")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#notifications-list")).toContainText(
+    "Projekt z powiadomieniem",
+  );
+});
+
 test("gosc widzi ekran oczekiwania", async ({ page }) => {
   await seedLocalState(page, {
     users: [guestUser],
