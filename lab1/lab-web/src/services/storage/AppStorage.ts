@@ -168,6 +168,13 @@ class AppStorage {
       .catch((error) => {
         const normalized =
           error instanceof Error ? error : new Error(String(error));
+        const current = this.cache.get(key) ?? [];
+        if (this.isSameSnapshot(current, values)) {
+          this.cache.set(
+            key,
+            previousValues.map((item) => ({ ...item })),
+          );
+        }
         this.syncErrors.set(key, normalized);
         console.error(`Nie udalo sie zsynchronizowac kolekcji ${key}.`, error);
         throw normalized;
@@ -189,6 +196,10 @@ class AppStorage {
       this.syncErrors.clear();
       throw error;
     }
+  }
+
+  private isSameSnapshot(left: WithId[], right: WithId[]): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
   }
 
   private getLocalCollection(key: CollectionKey): WithId[] {

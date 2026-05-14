@@ -829,8 +829,11 @@ function setActiveView(
   menuUsersBtn.classList.toggle("active", view === "users");
 }
 
-function setActiveProject(projectId: string): void {
+async function setActiveProject(projectId: string): Promise<void> {
   activeProjectService.setActiveProjectId(projectId);
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
   cancelStoryEdit();
   cancelTaskEdit();
   selectedTaskId = null;
@@ -878,7 +881,7 @@ function renderProjects(): void {
 
   projectList.querySelectorAll(".btn-select").forEach((button) => {
     button.addEventListener("click", () =>
-      setActiveProject((button as HTMLElement).dataset.id!),
+      void setActiveProject((button as HTMLElement).dataset.id!),
     );
   });
 
@@ -1215,7 +1218,11 @@ function renderTaskDetails(): void {
       <p><strong>Data zakonczenia:</strong> ${formatDate(task.finishedAt)}</p>
       <p><strong>Planowane h:</strong> ${task.estimatedHours}</p>
       <p><strong>Zrealizowane h:</strong> ${task.workedHours}</p>
-      <p><strong>Przypisana osoba:</strong> ${assignee ? `${assignee.firstName} ${assignee.lastName} (${assignee.role})` : "Brak"}</p>
+      <p><strong>Przypisana osoba:</strong> ${
+        assignee
+          ? `${escapeHtml(assignee.firstName)} ${escapeHtml(assignee.lastName)} (${getRoleLabel(assignee.role)})`
+          : "Brak"
+      }</p>
     </div>
 
     <div class="details-actions">
@@ -1226,7 +1233,7 @@ function renderTaskDetails(): void {
           ${getAssignableUsers()
             .map(
               (user) =>
-                `<option value="${user.id}" ${task.assigneeId === user.id ? "selected" : ""}>${user.firstName} ${user.lastName} (${user.role})</option>`,
+                `<option value="${user.id}" ${task.assigneeId === user.id ? "selected" : ""}>${escapeHtml(user.firstName)} ${escapeHtml(user.lastName)} (${getRoleLabel(user.role)})</option>`,
             )
             .join("")}
         </select>
