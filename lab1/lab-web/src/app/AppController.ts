@@ -352,14 +352,14 @@ function syncLoggedUserName(): void {
   loggedUserName.textContent = `${user.firstName} ${user.lastName} (${getRoleLabel(user.role)})`;
 }
 
-function sendNewAccountNotification(newUser: User): void {
+async function sendNewAccountNotification(newUser: User): Promise<boolean> {
   const adminRecipientIds = getAdminUsers()
     .filter((admin) => admin.id !== newUser.id)
     .map((admin) => admin.id);
   if (adminRecipientIds.length === 0) {
-    return;
+    return true;
   }
-  sendNotification({
+  return await sendNotification({
     title: "Nowe konto w systemie",
     message: `Utworzono konto: ${newUser.firstName} ${newUser.lastName} (${newUser.email}).`,
     priority: "high",
@@ -428,8 +428,7 @@ async function handleGoogleCredential(
     }
     loggedInUser = result.user;
     if (result.isNewUser) {
-      sendNewAccountNotification(result.user);
-      if (!(await ensureStorageSynced())) {
+      if (!(await sendNewAccountNotification(result.user))) {
         return;
       }
     }
@@ -771,15 +770,15 @@ function closeNotificationModal(): void {
   notificationModalBackdrop.classList.add("hidden");
 }
 
-function sendNotification(input: {
+async function sendNotification(input: {
   title: string;
   message: string;
   priority: Notification["priority"];
   recipientIds: string[];
-}): void {
+}): Promise<boolean> {
   const recipientIds = [...new Set(input.recipientIds)];
   if (recipientIds.length === 0) {
-    return;
+    return true;
   }
 
   const created = notificationService.createNotificationsForRecipients({
@@ -788,6 +787,9 @@ function sendNotification(input: {
     priority: input.priority,
     recipientIds,
   });
+  if (!(await ensureStorageSynced())) {
+    return false;
+  }
 
   const modalNotification = created.find(
     (notification) =>
@@ -802,6 +804,7 @@ function sendNotification(input: {
   updateUnreadCounter();
   renderNotifications();
   renderNotificationDetails();
+  return true;
 }
 
 function setActiveView(
@@ -934,7 +937,11 @@ async function deleteProject(id: string): Promise<void> {
     alert(result.error ?? "Nie udalo sie usunac projektu.");
     return;
   }
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1066,7 +1073,11 @@ async function deleteStory(id: string): Promise<void> {
     alert(result.error ?? "Nie udalo sie usunac historyjki.");
     return;
   }
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1304,7 +1315,11 @@ async function deleteTask(id: string): Promise<void> {
     return;
   }
 
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1338,7 +1353,11 @@ async function assignSelectedTask(taskId: string): Promise<void> {
     return;
   }
 
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1372,7 +1391,11 @@ async function finishSelectedTask(taskId: string): Promise<void> {
     return;
   }
 
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1410,7 +1433,11 @@ projectForm.addEventListener("submit", async (event) => {
     alert(result.error ?? "Nie udalo sie zapisac projektu.");
     return;
   }
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1460,7 +1487,11 @@ storyForm.addEventListener("submit", async (event) => {
     alert(result.error ?? "Nie udalo sie zapisac historyjki.");
     return;
   }
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
@@ -1510,7 +1541,11 @@ taskForm.addEventListener("submit", async (event) => {
     alert(result.error ?? "Nie udalo sie zapisac zadania.");
     return;
   }
-  result.notifications.forEach((notification) => sendNotification(notification));
+  for (const notification of result.notifications) {
+    if (!(await sendNotification(notification))) {
+      return;
+    }
+  }
   if (!(await ensureStorageSynced())) {
     return;
   }
