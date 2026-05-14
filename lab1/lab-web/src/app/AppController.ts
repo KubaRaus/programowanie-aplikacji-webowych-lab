@@ -1,5 +1,4 @@
 import type { Notification } from "../models/Notification";
-import type { StoryPriority, StoryStatus } from "../models/Story";
 import type { User, UserRole } from "../models/User";
 import { APP_CONFIG } from "../config";
 import { ActiveProjectService } from "../services/ActiveProjectService";
@@ -12,6 +11,7 @@ import { UserService } from "../services/UserService";
 import { BoardWorkflowService } from "../use-cases/BoardWorkflowService";
 import { TaskWorkflowService } from "../use-cases/TaskWorkflowService";
 import { createAppAuthController } from "./AppAuthController";
+import { createAppBoardActionsController } from "./AppBoardActionsController";
 import { createAppBoardPanels } from "./AppBoardPanels";
 import { bindAppEvents } from "./AppEventBindings";
 import { createAppDom } from "./AppDom";
@@ -270,6 +270,7 @@ function getActiveProject() {
 }
 
 let authController: ReturnType<typeof createAppAuthController>;
+let boardActionsController: ReturnType<typeof createAppBoardActionsController>;
 
 const sidePanels = createAppSidePanels({
   notificationService,
@@ -328,6 +329,47 @@ authController = createAppAuthController({
     sidePanels.renderUsers();
     renderStoryOwnerOptions();
   },
+});
+
+boardActionsController = createAppBoardActionsController({
+  boardWorkflowService,
+  taskWorkflowService,
+  taskService,
+  projectForm,
+  projectNameInput,
+  projectDescInput,
+  storyForm,
+  storyNameInput,
+  storyDescInput,
+  storyPriorityInput,
+  storyStatusInput,
+  storyOwnerInput,
+  taskForm,
+  taskNameInput,
+  taskDescInput,
+  taskPriorityInput,
+  taskStoryInput,
+  taskEstimatedHoursInput,
+  getActiveProject,
+  getAdminUserIds: () => getAdminUsers().map((user) => user.id),
+  getRequiredLoggedInUserId: () => requireLoggedInUser().id,
+  getEditingProjectId: () => editingProjectId,
+  getEditingStoryId: () => editingStoryId,
+  getEditingTaskId: () => editingTaskId,
+  getSelectedTaskId: () => selectedTaskId,
+  setSelectedTaskId: (value) => {
+    selectedTaskId = value;
+  },
+  sendNotification,
+  ensureStorageSynced,
+  renderProjects,
+  renderStories,
+  renderTaskStoryOptions,
+  renderTasks,
+  renderTaskDetails,
+  cancelProjectEdit,
+  cancelStoryEdit,
+  cancelTaskEdit,
 });
 
 const notificationModalController = createNotificationModalController({
@@ -453,36 +495,7 @@ function cancelProjectEdit(): void {
 }
 
 async function deleteProject(id: string): Promise<void> {
-  if (!confirm("Czy na pewno chcesz usunac ten projekt?")) {
-    return;
-  }
-
-  const result = boardWorkflowService.deleteProject(id);
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie usunac projektu.");
-    return;
-  }
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  if (editingProjectId === id) {
-    cancelProjectEdit();
-  }
-
-  selectedTaskId = result.clearedSelectedTask ? null : selectedTaskId;
-  cancelStoryEdit();
-  cancelTaskEdit();
-  renderProjects();
-  renderStories();
-  renderTaskStoryOptions();
-  renderTasks();
-  renderTaskDetails();
+  await boardActionsController.deleteProject(id);
 }
 
 function renderStories(): void {
@@ -519,36 +532,7 @@ function cancelStoryEdit(): void {
 }
 
 async function deleteStory(id: string): Promise<void> {
-  if (!confirm("Czy na pewno chcesz usunac te historyjke?")) {
-    return;
-  }
-
-  const result = boardWorkflowService.deleteStory(id, selectedTaskId);
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie usunac historyjki.");
-    return;
-  }
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  if (editingStoryId === id) {
-    cancelStoryEdit();
-  }
-
-  if (result.clearedSelectedTask) {
-    selectedTaskId = null;
-  }
-
-  renderStories();
-  renderTaskStoryOptions();
-  renderTasks();
-  renderTaskDetails();
+  await boardActionsController.deleteStory(id);
 }
 
 function renderTaskStoryOptions(): void {
@@ -594,106 +578,15 @@ function cancelTaskEdit(): void {
 }
 
 async function deleteTask(id: string): Promise<void> {
-  if (!confirm("Czy na pewno chcesz usunac to zadanie?")) {
-    return;
-  }
-
-  const result = taskWorkflowService.deleteTask(id);
-  if (!result.ok) {
-    if (result.error) {
-      alert(result.error);
-    }
-    return;
-  }
-
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  if (editingTaskId === id) {
-    cancelTaskEdit();
-  }
-
-  if (selectedTaskId === id) {
-    selectedTaskId = null;
-  }
-
-  renderStories();
-  renderTasks();
-  renderTaskDetails();
+  await boardActionsController.deleteTask(id);
 }
 
 async function assignSelectedTask(taskId: string): Promise<void> {
-  const assigneeSelect =
-    document.querySelector<HTMLSelectElement>("#details-assignee");
-  const assigneeId = assigneeSelect?.value ?? "";
-
-  if (!assigneeId) {
-    alert("Wybierz osobe do przypisania.");
-    return;
-  }
-
-  const result = taskWorkflowService.assignTask(taskId, assigneeId);
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie przypisac zadania.");
-    return;
-  }
-
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  renderStories();
-  renderTasks();
-  renderTaskDetails();
+  await boardActionsController.assignSelectedTask(taskId);
 }
 
 async function finishSelectedTask(taskId: string): Promise<void> {
-  const task = taskService.getTaskById(taskId);
-  if (!task) {
-    return;
-  }
-
-  const workedHoursInput = document.querySelector<HTMLInputElement>(
-    "#details-worked-hours",
-  );
-  const workedHours = Number.parseInt(
-    workedHoursInput?.value ?? String(task.workedHours),
-    10,
-  );
-  const safeWorkedHours =
-    Number.isFinite(workedHours) && workedHours >= 0
-      ? workedHours
-      : task.workedHours;
-
-  const result = taskWorkflowService.finishTask(task.id, safeWorkedHours);
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie zamknac zadania.");
-    return;
-  }
-
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  renderStories();
-  renderTasks();
-  renderTaskDetails();
+  await boardActionsController.finishSelectedTask(taskId);
 }
 
 function escapeHtml(text: string): string {
@@ -704,153 +597,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-projectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const name = projectNameInput.value.trim();
-  const description = projectDescInput.value.trim();
-  if (!name) {
-    return;
-  }
-
-  const result = boardWorkflowService.upsertProject({
-    editingProjectId,
-    name,
-    description,
-    adminRecipientIds: getAdminUsers().map((user) => user.id),
-  });
-
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie zapisac projektu.");
-    return;
-  }
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  if (editingProjectId) {
-    cancelProjectEdit();
-  } else {
-    projectForm.reset();
-  }
-
-  renderProjects();
-  renderStories();
-  renderTaskStoryOptions();
-  renderTasks();
-  renderTaskDetails();
-});
-
-storyForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const activeProject = getActiveProject();
-  if (!activeProject) {
-    return;
-  }
-
-  const name = storyNameInput.value.trim();
-  const description = storyDescInput.value.trim();
-  const priority = storyPriorityInput.value as StoryPriority;
-  const status = storyStatusInput.value as StoryStatus;
-  const ownerId = storyOwnerInput.value || requireLoggedInUser().id;
-
-  if (!name) {
-    return;
-  }
-
-  const result = boardWorkflowService.upsertStory({
-    editingStoryId,
-    name,
-    description,
-    priority,
-    status,
-    projectId: activeProject.id,
-    ownerId,
-  });
-
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie zapisac historyjki.");
-    return;
-  }
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  cancelStoryEdit();
-
-  renderStories();
-  renderTaskStoryOptions();
-  renderTasks();
-  renderTaskDetails();
-});
-
-taskForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const activeProject = getActiveProject();
-  if (!activeProject) {
-    return;
-  }
-
-  const name = taskNameInput.value.trim();
-  const description = taskDescInput.value.trim();
-  const priority = taskPriorityInput.value as StoryPriority;
-  const storyId = taskStoryInput.value;
-  const estimatedHours = Number.parseInt(taskEstimatedHoursInput.value, 10);
-
-  if (
-    !name ||
-    !storyId ||
-    !Number.isFinite(estimatedHours) ||
-    estimatedHours <= 0
-  ) {
-    return;
-  }
-
-  const result = boardWorkflowService.upsertTask({
-    editingTaskId,
-    name,
-    description,
-    priority,
-    storyId,
-    projectId: activeProject.id,
-    estimatedHours,
-  });
-
-  if (!result.ok) {
-    alert(result.error ?? "Nie udalo sie zapisac zadania.");
-    return;
-  }
-  for (const notification of result.notifications) {
-    if (!(await sendNotification(notification))) {
-      return;
-    }
-  }
-  if (!(await ensureStorageSynced())) {
-    return;
-  }
-
-  if (editingTaskId) {
-    cancelTaskEdit();
-  } else {
-    selectedTaskId = result.selectedTaskId;
-    cancelTaskEdit();
-  }
-
-  renderTasks();
-  renderTaskDetails();
-});
+boardActionsController.bindFormSubmits();
 
 bindAppEvents(appDom, {
   onProjectCancel: cancelProjectEdit,
