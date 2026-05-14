@@ -1,10 +1,11 @@
 import type { StoryPriority } from "../models/Story";
 import type { Task } from "../models/Task";
+import type { ITaskRepository } from "../ports/Repositories";
 import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = "manageme_tasks";
 
-export class TaskService {
+export class TaskService implements ITaskRepository {
   private getAll(): Task[] {
     return appStorage.getCollection<Task>(STORAGE_KEY);
   }

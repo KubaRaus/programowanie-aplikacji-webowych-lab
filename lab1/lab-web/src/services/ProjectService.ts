@@ -1,9 +1,10 @@
 import type { Project } from '../models/Project';
+import type { IProjectRepository } from "../ports/Repositories";
 import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = 'manageme_projects';
 
-export class ProjectService {
+export class ProjectService implements IProjectRepository {
   private getAll(): Project[] {
     return appStorage.getCollection<Project>(STORAGE_KEY);
   }

@@ -1,15 +1,19 @@
-const STORAGE_KEY = "manageme_active_project_id";
+import {
+  SESSION_STORAGE_KEYS,
+  sessionStorageService,
+} from "./storage/SessionStorage";
+import type { IActiveProjectStore } from "../ports/Repositories";
 
-export class ActiveProjectService {
+export class ActiveProjectService implements IActiveProjectStore {
   getActiveProjectId(): string | null {
-    return localStorage.getItem(STORAGE_KEY);
+    return sessionStorageService.get(SESSION_STORAGE_KEYS.activeProjectId);
   }
 
   setActiveProjectId(projectId: string): void {
-    localStorage.setItem(STORAGE_KEY, projectId);
+    sessionStorageService.set(SESSION_STORAGE_KEYS.activeProjectId, projectId);
   }
 
   clearActiveProjectId(): void {
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorageService.remove(SESSION_STORAGE_KEYS.activeProjectId);
   }
 }

@@ -63,10 +63,11 @@ class AppStorage {
 
   setCollection<T extends WithId>(key: CollectionKey, values: T[]): void {
     if (this.mode === "database") {
+      const previousSnapshot = this.cache.get(key) ?? [];
       const snapshot = values.map((item) => ({ ...item })) as WithId[];
       this.cache.set(key, snapshot);
       this.loaded.add(key);
-      this.enqueueSync(key, snapshot);
+      this.enqueueSync(key, previousSnapshot, snapshot);
       return;
     }
 
@@ -96,7 +97,7 @@ class AppStorage {
       if (localValues.length > 0) {
         this.cache.set(collectionKey, localValues);
         this.loaded.add(collectionKey);
-        await this.syncCollection(collectionKey, localValues);
+        await this.syncCollection(collectionKey, [], localValues);
         continue;
       }
 
@@ -127,20 +128,19 @@ class AppStorage {
 
   private async syncCollection(
     key: CollectionKey,
+    previousValues: WithId[],
     values: WithId[],
   ): Promise<void> {
     if (!this.db) {
       return;
     }
 
-    const collectionRef = collection(this.db, key);
-    const existing = await getDocs(collectionRef);
+    const previousIds = new Set(previousValues.map((item) => item.id));
     const nextIds = new Set(values.map((item) => item.id));
+    const removedIds = [...previousIds].filter((id) => !nextIds.has(id));
 
     await Promise.all(
-      existing.docs
-        .filter((entry) => !nextIds.has(entry.id))
-        .map((entry) => deleteDoc(doc(this.db!, key, entry.id))),
+      removedIds.map((id) => deleteDoc(doc(this.db!, key, id))),
     );
 
     await Promise.all(
@@ -150,11 +150,15 @@ class AppStorage {
     );
   }
 
-  private enqueueSync(key: CollectionKey, values: WithId[]): void {
+  private enqueueSync(
+    key: CollectionKey,
+    previousValues: WithId[],
+    values: WithId[],
+  ): void {
     const previous = this.syncQueues.get(key) ?? Promise.resolve();
     const next = previous
       .catch(() => undefined)
-      .then(() => this.syncCollection(key, values))
+      .then(() => this.syncCollection(key, previousValues, values))
       .catch((error) => {
         console.error(`Nie udalo sie zsynchronizowac kolekcji ${key}.`, error);
       });

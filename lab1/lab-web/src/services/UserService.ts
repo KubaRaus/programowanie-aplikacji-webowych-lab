@@ -1,8 +1,12 @@
 import type { User } from "../models/User";
+import type { IUserRepository } from "../ports/Repositories";
 import { appStorage } from "./storage/AppStorage";
+import {
+  SESSION_STORAGE_KEYS,
+  sessionStorageService,
+} from "./storage/SessionStorage";
 
 const USERS_STORAGE_KEY = "manageme_users";
-const LOGGED_USER_ID_STORAGE_KEY = "manageme_logged_user_id";
 
 type OAuthProfile = {
   email: string;
@@ -10,7 +14,7 @@ type OAuthProfile = {
   lastName: string;
 };
 
-export class UserService {
+export class UserService implements IUserRepository {
   private getAll(): User[] {
     return appStorage.getCollection<User>(USERS_STORAGE_KEY);
   }
@@ -28,11 +32,13 @@ export class UserService {
   }
 
   private saveLoggedInUserId(userId: string): void {
-    localStorage.setItem(LOGGED_USER_ID_STORAGE_KEY, userId);
+    sessionStorageService.set(SESSION_STORAGE_KEYS.loggedUserId, userId);
   }
 
   getLoggedInUser(): User | null {
-    const loggedInUserId = localStorage.getItem(LOGGED_USER_ID_STORAGE_KEY);
+    const loggedInUserId = sessionStorageService.get(
+      SESSION_STORAGE_KEYS.loggedUserId,
+    );
     if (!loggedInUserId) {
       return null;
     }
@@ -41,7 +47,7 @@ export class UserService {
   }
 
   logout(): void {
-    localStorage.removeItem(LOGGED_USER_ID_STORAGE_KEY);
+    sessionStorageService.remove(SESSION_STORAGE_KEYS.loggedUserId);
   }
 
   getUsers(): User[] {

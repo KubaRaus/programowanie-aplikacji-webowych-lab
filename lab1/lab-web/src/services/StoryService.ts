@@ -1,9 +1,10 @@
 import type { Story, StoryPriority, StoryStatus } from "../models/Story";
+import type { IStoryRepository } from "../ports/Repositories";
 import { appStorage } from "./storage/AppStorage";
 
 const STORAGE_KEY = "manageme_stories";
 
-export class StoryService {
+export class StoryService implements IStoryRepository {
   private getAll(): Story[] {
     return appStorage.getCollection<Story>(STORAGE_KEY);
   }
