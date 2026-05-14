@@ -1,0 +1,76 @@
+function getRequiredElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`Brak elementu DOM: ${selector}`);
+  }
+  return element;
+}
+
+export function createAppDom() {
+  return {
+    loggedUserName: getRequiredElement<HTMLSpanElement>("#logged-user-name"),
+    projectForm: getRequiredElement<HTMLFormElement>("#project-form"),
+    projectNameInput: getRequiredElement<HTMLInputElement>("#project-name"),
+    projectDescInput: getRequiredElement<HTMLTextAreaElement>("#project-desc"),
+    projectSubmitBtn: getRequiredElement<HTMLButtonElement>("#project-submit-btn"),
+    projectCancelBtn: getRequiredElement<HTMLButtonElement>("#project-cancel-btn"),
+    projectFormTitle: getRequiredElement<HTMLHeadingElement>("#project-form-title"),
+    projectList: getRequiredElement<HTMLDivElement>("#project-list"),
+    projectCount: getRequiredElement<HTMLSpanElement>("#project-count"),
+    activeProjectLabel: getRequiredElement<HTMLParagraphElement>("#active-project-label"),
+    storyForm: getRequiredElement<HTMLFormElement>("#story-form"),
+    storyFormTitle: getRequiredElement<HTMLHeadingElement>("#story-form-title"),
+    storyNameInput: getRequiredElement<HTMLInputElement>("#story-name"),
+    storyDescInput: getRequiredElement<HTMLTextAreaElement>("#story-desc"),
+    storyPriorityInput: getRequiredElement<HTMLSelectElement>("#story-priority"),
+    storyStatusInput: getRequiredElement<HTMLSelectElement>("#story-status"),
+    storyOwnerInput: getRequiredElement<HTMLSelectElement>("#story-owner"),
+    storySubmitBtn: getRequiredElement<HTMLButtonElement>("#story-submit-btn"),
+    storyCancelBtn: getRequiredElement<HTMLButtonElement>("#story-cancel-btn"),
+    storyBoard: getRequiredElement<HTMLDivElement>("#story-board"),
+    taskProjectLabel: getRequiredElement<HTMLParagraphElement>("#task-project-label"),
+    taskForm: getRequiredElement<HTMLFormElement>("#task-form"),
+    taskFormTitle: getRequiredElement<HTMLHeadingElement>("#task-form-title"),
+    taskNameInput: getRequiredElement<HTMLInputElement>("#task-name"),
+    taskDescInput: getRequiredElement<HTMLTextAreaElement>("#task-desc"),
+    taskPriorityInput: getRequiredElement<HTMLSelectElement>("#task-priority"),
+    taskStoryInput: getRequiredElement<HTMLSelectElement>("#task-story"),
+    taskEstimatedHoursInput: getRequiredElement<HTMLInputElement>("#task-estimated-hours"),
+    taskSubmitBtn: getRequiredElement<HTMLButtonElement>("#task-submit-btn"),
+    taskCancelBtn: getRequiredElement<HTMLButtonElement>("#task-cancel-btn"),
+    taskBoard: getRequiredElement<HTMLDivElement>("#task-board"),
+    taskDetails: getRequiredElement<HTMLDivElement>("#task-details"),
+    themeToggleBtn: getRequiredElement<HTMLButtonElement>("#theme-toggle-btn"),
+    logoutBtn: getRequiredElement<HTMLButtonElement>("#logout-btn"),
+    loginView: getRequiredElement<HTMLElement>("#login-view"),
+    blockedView: getRequiredElement<HTMLElement>("#blocked-view"),
+    blockedLogoutBtn: getRequiredElement<HTMLButtonElement>("#blocked-logout-btn"),
+    loginError: getRequiredElement<HTMLParagraphElement>("#login-error"),
+    googleLoginButton: getRequiredElement<HTMLDivElement>("#google-login-button"),
+    appShell: getRequiredElement<HTMLElement>("#app-shell"),
+    guestPendingView: getRequiredElement<HTMLElement>("#guest-pending-view"),
+    boardView: getRequiredElement<HTMLElement>("#board-view"),
+    notificationsView: getRequiredElement<HTMLElement>("#notifications-view"),
+    notificationDetailsView: getRequiredElement<HTMLElement>("#notification-details-view"),
+    usersView: getRequiredElement<HTMLElement>("#users-view"),
+    notificationsList: getRequiredElement<HTMLDivElement>("#notifications-list"),
+    notificationDetails: getRequiredElement<HTMLDivElement>("#notification-details"),
+    menuBoardBtn: getRequiredElement<HTMLButtonElement>("#menu-board-btn"),
+    menuNotificationsBtn: getRequiredElement<HTMLButtonElement>("#menu-notifications-btn"),
+    menuUsersBtn: getRequiredElement<HTMLButtonElement>("#menu-users-btn"),
+    notificationsBackBtn: getRequiredElement<HTMLButtonElement>("#notifications-back-btn"),
+    notificationDetailsBackBtn: getRequiredElement<HTMLButtonElement>("#notification-details-back-btn"),
+    unreadCounterBtn: getRequiredElement<HTMLButtonElement>("#unread-counter-btn"),
+    unreadCounterValue: getRequiredElement<HTMLSpanElement>("#unread-counter-value"),
+    notificationModalBackdrop: getRequiredElement<HTMLDivElement>("#notification-modal-backdrop"),
+    notificationModalTitle: getRequiredElement<HTMLHeadingElement>("#notification-modal-title"),
+    notificationModalMessage: getRequiredElement<HTMLParagraphElement>("#notification-modal-message"),
+    notificationModalPriority: getRequiredElement<HTMLSpanElement>("#notification-modal-priority"),
+    notificationModalDate: getRequiredElement<HTMLSpanElement>("#notification-modal-date"),
+    notificationModalOpenBtn: getRequiredElement<HTMLButtonElement>("#notification-modal-open-btn"),
+    notificationModalCloseBtn: getRequiredElement<HTMLButtonElement>("#notification-modal-close-btn"),
+    usersList: getRequiredElement<HTMLDivElement>("#users-list"),
+  };
+}
+
+export type AppDom = ReturnType<typeof createAppDom>;
