@@ -37,11 +37,11 @@ header h1 {
 }
 
 .subtitle {
-  @apply m-0 text-base text-slate-500 dark:text-slate-400;
+  @apply m-0 text-base text-slate-600 dark:text-slate-400;
 }
 
 .logged-user {
-  @apply mt-2 text-sm text-slate-600 dark:text-slate-300;
+  @apply mt-2 text-sm text-slate-700 dark:text-slate-300;
 }
 
 .theme-toggle {
@@ -83,7 +83,7 @@ html.dark .task-details {
 .list-section h2,
 .story-header h2,
 .task-header h2 {
-  @apply mb-5 mt-0 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+  @apply mb-5 mt-0 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400;
 }
 
 .story-header,
@@ -92,7 +92,7 @@ html.dark .task-details {
 }
 
 .active-project-label {
-  @apply m-0 text-sm text-slate-600 dark:text-slate-300;
+  @apply m-0 text-sm text-slate-700 dark:text-slate-300;
 }
 
 .form-group {
@@ -101,7 +101,7 @@ html.dark .task-details {
 
 .form-group label,
 .details-actions label {
-  @apply text-sm text-slate-600 dark:text-slate-300;
+  @apply text-sm text-slate-700 dark:text-slate-300;
 }
 
 input,
@@ -169,7 +169,7 @@ html.dark select {
 }
 
 .project-desc {
-  @apply mb-1 text-sm text-slate-600 dark:text-slate-300;
+  @apply mb-1 text-sm text-slate-700 dark:text-slate-300;
 }
 
 .project-id {
@@ -243,16 +243,16 @@ html.dark .task-card {
 
 .story-card p,
 .task-card p {
-  @apply m-0 text-sm text-slate-600 dark:text-slate-300;
+  @apply m-0 text-sm text-slate-700 dark:text-slate-300;
 }
 
 .story-meta,
 .task-meta {
-  @apply flex justify-between gap-2 text-xs text-slate-500 dark:text-slate-400;
+  @apply flex justify-between gap-2 text-xs text-slate-600 dark:text-slate-400;
 }
 
 .column-empty {
-  @apply m-0 text-sm italic text-slate-500 dark:text-slate-400;
+  @apply m-0 text-sm italic text-slate-600 dark:text-slate-400;
 }
 
 .details-grid {
@@ -276,7 +276,7 @@ html.dark .task-card {
 }
 
 .details-hint {
-  @apply mt-1 text-xs text-slate-500 dark:text-slate-400;
+  @apply mt-1 text-xs text-slate-600 dark:text-slate-400;
 }
 
 .header-toolbar {
@@ -320,7 +320,7 @@ html.dark .notifications-view {
 }
 
 .notifications-header h2 {
-  @apply m-0 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+  @apply m-0 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400;
 }
 
 .notifications-list {
@@ -352,11 +352,11 @@ html.dark .notification-read {
 }
 
 .notification-card p {
-  @apply mt-1 text-sm text-slate-700 dark:text-slate-300;
+  @apply mt-1 text-sm text-slate-800 dark:text-slate-300;
 }
 
 .notification-meta {
-  @apply mb-3 mt-2 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400;
+  @apply mb-3 mt-2 flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400;
 }
 
 .modal-backdrop {
@@ -376,11 +376,11 @@ html.dark .notification-modal {
 }
 
 .notification-modal p {
-  @apply mb-0 mt-2 text-sm text-slate-700 dark:text-slate-300;
+  @apply mb-0 mt-2 text-sm text-slate-800 dark:text-slate-300;
 }
 
 .notification-modal-meta {
-  @apply mt-3 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400;
+  @apply mt-3 flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400;
 }
 
 .notification-modal-actions {
@@ -404,7 +404,7 @@ html.dark .auth-view {
 }
 
 .auth-hint {
-  @apply m-0 text-xs text-slate-500 dark:text-slate-400;
+  @apply m-0 text-xs text-slate-600 dark:text-slate-400;
 }
 
 .users-list {
@@ -424,7 +424,7 @@ html.dark .user-card {
 }
 
 .user-card p {
-  @apply m-0 text-sm text-slate-600 dark:text-slate-300;
+  @apply m-0 text-sm text-slate-700 dark:text-slate-300;
 }
 
 .user-card.user-card-blocked {
@@ -437,4 +437,105 @@ html.dark .user-card.user-card-blocked {
 
 .user-actions {
   @apply flex flex-wrap items-center gap-2;
+}
+
+/* Stronger contrast overrides for light mode */
+html:not(.dark) .subtitle {
+  color: #475569;
+}
+
+html:not(.dark) .logged-user {
+  color: #334155;
+}
+
+html:not(.dark) #logged-user-name {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+html:not(.dark) .project-desc,
+html:not(.dark) .story-card p,
+html:not(.dark) .task-card p,
+html:not(.dark) .user-card p,
+html:not(.dark) .form-group label,
+html:not(.dark) .details-actions label,
+html:not(.dark) .active-project-label {
+  color: #334155;
+}
+
+html:not(.dark) .form-section h2,
+html:not(.dark) .list-section h2,
+html:not(.dark) .story-header h2,
+html:not(.dark) .task-header h2,
+html:not(.dark) .notifications-header h2 {
+  color: #475569;
+}
+
+html:not(.dark) .story-form h3,
+html:not(.dark) .task-form h3,
+html:not(.dark) .story-column h3,
+html:not(.dark) .task-column h3 {
+  color: #334155;
+}
+
+html:not(.dark) .project-name,
+html:not(.dark) .story-card h4,
+html:not(.dark) .task-card h4,
+html:not(.dark) .user-card h3 {
+  color: #0f172a;
+}
+
+html:not(.dark) .task-details h3 {
+  color: #0f172a;
+}
+
+html:not(.dark) .project-id {
+  color: #475569;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+html:not(.dark) .story-meta,
+html:not(.dark) .task-meta,
+html:not(.dark) .notification-meta,
+html:not(.dark) .details-hint,
+html:not(.dark) .column-empty {
+  color: #475569;
+}
+
+html:not(.dark) .task-details .column-empty {
+  color: #334155;
+  font-style: normal;
+}
+
+html:not(.dark) #notification-details .details-grid p {
+  color: #334155;
+}
+
+html:not(.dark) #notification-details .details-grid p strong {
+  color: #0f172a;
+}
+
+html:not(.dark) #notification-details > p {
+  color: #1e293b;
+}
+
+html:not(.dark) .notification-card {
+  opacity: 1;
+}
+
+html:not(.dark) .notification-read {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+html:not(.dark) .notification-card h3,
+html:not(.dark) .notification-card p,
+html:not(.dark) .notification-modal h3,
+html:not(.dark) .notification-modal p {
+  color: #1e293b;
 }
