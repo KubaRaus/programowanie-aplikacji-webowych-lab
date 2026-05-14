@@ -109,6 +109,10 @@ export function renderAppLayout(
               <option value="done">Done</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="story-owner">Wlasciciel</label>
+            <select id="story-owner"></select>
+          </div>
         </div>
         <div class="form-actions">
           <button type="submit" id="story-submit-btn" class="btn btn-primary">Dodaj historyjke</button>

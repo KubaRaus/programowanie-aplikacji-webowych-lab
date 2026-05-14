@@ -113,6 +113,15 @@ export class BoardWorkflowService {
     ownerId: string;
   }): WorkflowResult {
     if (input.editingStoryId) {
+      const existingStory = this.storyRepository.getStoryById(input.editingStoryId);
+      if (!existingStory) {
+        return {
+          ok: false,
+          error: "Nie znaleziono historyjki do edycji.",
+          notifications: [],
+        };
+      }
+
       const updated = this.storyRepository.updateStory(input.editingStoryId, {
         name: input.name,
         description: input.description,
@@ -127,10 +136,21 @@ export class BoardWorkflowService {
           notifications: [],
         };
       }
-      return { ok: true, notifications: [] };
+
+      const notifications: NotificationDraft[] = [];
+      if (existingStory.ownerId !== input.ownerId) {
+        notifications.push({
+          title: "Przypisano Cie do historyjki",
+          message: `Historyjka "${updated.name}" zostala przypisana do Ciebie.`,
+          priority: "high",
+          recipientIds: [input.ownerId],
+        });
+      }
+
+      return { ok: true, notifications };
     }
 
-    this.storyRepository.createStory({
+    const created = this.storyRepository.createStory({
       name: input.name,
       description: input.description,
       priority: input.priority,
@@ -138,7 +158,17 @@ export class BoardWorkflowService {
       status: input.status,
       ownerId: input.ownerId,
     });
-    return { ok: true, notifications: [] };
+    return {
+      ok: true,
+      notifications: [
+        {
+          title: "Przypisano Cie do historyjki",
+          message: `Historyjka "${created.name}" zostala przypisana do Ciebie.`,
+          priority: "high",
+          recipientIds: [input.ownerId],
+        },
+      ],
+    };
   }
 
   deleteStory(storyId: string, selectedTaskId: string | null): DeleteStoryResult {

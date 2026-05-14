@@ -16,7 +16,8 @@ type CollectionKey =
   | "manageme_stories"
   | "manageme_tasks"
   | "manageme_users"
-  | "manageme_notifications";
+  | "manageme_notifications"
+  | "manageme_app_state";
 
 const DATABASE_COLLECTIONS: CollectionKey[] = [
   "manageme_projects",
@@ -24,6 +25,7 @@ const DATABASE_COLLECTIONS: CollectionKey[] = [
   "manageme_tasks",
   "manageme_users",
   "manageme_notifications",
+  "manageme_app_state",
 ];
 
 class AppStorage {
@@ -31,6 +33,7 @@ class AppStorage {
   private readonly cache = new Map<CollectionKey, WithId[]>();
   private readonly loaded = new Set<CollectionKey>();
   private readonly syncQueues = new Map<CollectionKey, Promise<void>>();
+  private readonly syncErrors = new Map<CollectionKey, Error>();
   private db: Firestore | null = null;
   private initPromise: Promise<void> | null = null;
 
@@ -159,11 +162,33 @@ class AppStorage {
     const next = previous
       .catch(() => undefined)
       .then(() => this.syncCollection(key, previousValues, values))
+      .then(() => {
+        this.syncErrors.delete(key);
+      })
       .catch((error) => {
+        const normalized =
+          error instanceof Error ? error : new Error(String(error));
+        this.syncErrors.set(key, normalized);
         console.error(`Nie udalo sie zsynchronizowac kolekcji ${key}.`, error);
+        throw normalized;
       });
 
     this.syncQueues.set(key, next);
+  }
+
+  async waitForIdle(): Promise<void> {
+    if (this.mode !== "database") {
+      return;
+    }
+
+    const queues = [...this.syncQueues.values()];
+    await Promise.all(queues.map((queue) => queue.catch(() => undefined)));
+
+    const error = [...this.syncErrors.values()][0];
+    if (error) {
+      this.syncErrors.clear();
+      throw error;
+    }
   }
 
   private getLocalCollection(key: CollectionKey): WithId[] {

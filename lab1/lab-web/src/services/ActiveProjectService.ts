@@ -1,19 +1,20 @@
-import {
-  SESSION_STORAGE_KEYS,
-  sessionStorageService,
-} from "./storage/SessionStorage";
 import type { IActiveProjectStore } from "../ports/Repositories";
+import { AppStateService } from "./AppStateService";
+
+const ACTIVE_PROJECT_KEY = "active_project_id";
 
 export class ActiveProjectService implements IActiveProjectStore {
+  private readonly appStateService = new AppStateService();
+
   getActiveProjectId(): string | null {
-    return sessionStorageService.get(SESSION_STORAGE_KEYS.activeProjectId);
+    return this.appStateService.getValue(ACTIVE_PROJECT_KEY);
   }
 
   setActiveProjectId(projectId: string): void {
-    sessionStorageService.set(SESSION_STORAGE_KEYS.activeProjectId, projectId);
+    this.appStateService.setValue(ACTIVE_PROJECT_KEY, projectId);
   }
 
   clearActiveProjectId(): void {
-    sessionStorageService.remove(SESSION_STORAGE_KEYS.activeProjectId);
+    this.appStateService.removeValue(ACTIVE_PROJECT_KEY);
   }
 }

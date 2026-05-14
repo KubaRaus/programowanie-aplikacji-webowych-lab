@@ -79,6 +79,8 @@ const storyPriorityInput =
   document.querySelector<HTMLSelectElement>("#story-priority")!;
 const storyStatusInput =
   document.querySelector<HTMLSelectElement>("#story-status")!;
+const storyOwnerInput =
+  document.querySelector<HTMLSelectElement>("#story-owner")!;
 const storySubmitBtn =
   document.querySelector<HTMLButtonElement>("#story-submit-btn")!;
 const storyCancelBtn =
@@ -233,8 +235,42 @@ function getAssignableUsers(): User[] {
   return userService.getAssignableUsers();
 }
 
+function getStoryOwnerCandidates(): User[] {
+  return userService.getUsers().filter((user) => !user.isBlocked);
+}
+
 function getAdminUsers(): User[] {
   return userService.getAdminUsers().filter((user) => !user.isBlocked);
+}
+
+function renderStoryOwnerOptions(selectedOwnerId?: string): void {
+  const users = getStoryOwnerCandidates();
+  if (users.length === 0) {
+    storyOwnerInput.innerHTML =
+      '<option value="">Brak aktywnych uzytkownikow</option>';
+    storyOwnerInput.disabled = true;
+    return;
+  }
+
+  storyOwnerInput.disabled = false;
+  storyOwnerInput.innerHTML = users
+    .map(
+      (user) =>
+        `<option value="${user.id}">${escapeHtml(user.firstName)} ${escapeHtml(user.lastName)} (${getRoleLabel(user.role)})</option>`,
+    )
+    .join("");
+
+  const fallbackOwnerId = requireLoggedInUser().id;
+  const preferredOwnerId =
+    selectedOwnerId && users.some((user) => user.id === selectedOwnerId)
+      ? selectedOwnerId
+      : fallbackOwnerId;
+
+  if (users.some((user) => user.id === preferredOwnerId)) {
+    storyOwnerInput.value = preferredOwnerId;
+  } else {
+    storyOwnerInput.value = users[0].id;
+  }
 }
 
 function getRoleLabel(role: UserRole): string {
@@ -257,6 +293,24 @@ function parseJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(decoded) as Record<string, unknown>;
 }
 
+function validateGooglePayload(payload: Record<string, unknown>): void {
+  const audience = String(payload.aud ?? "");
+  if (!audience || audience !== GOOGLE_CLIENT_ID) {
+    throw new Error("Nieprawidlowe audience tokena Google.");
+  }
+
+  const issuer = String(payload.iss ?? "");
+  const validIssuers = ["accounts.google.com", "https://accounts.google.com"];
+  if (!validIssuers.includes(issuer)) {
+    throw new Error("Nieprawidlowy issuer tokena Google.");
+  }
+
+  const expiration = Number(payload.exp ?? 0);
+  if (!Number.isFinite(expiration) || expiration <= Date.now() / 1000) {
+    throw new Error("Token Google wygasl.");
+  }
+}
+
 function splitName(fullName: string): { firstName: string; lastName: string } {
   const normalized = fullName.trim();
   if (!normalized) {
@@ -267,6 +321,20 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
     firstName: parts[0],
     lastName: parts.slice(1).join(" ") || "Google",
   };
+}
+
+async function ensureStorageSynced(): Promise<boolean> {
+  try {
+    await appStorage.waitForIdle();
+    return true;
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Nie udalo sie zapisac danych w bazie.";
+    alert(`Zapis danych nie powiodl sie: ${message}`);
+    return false;
+  }
 }
 
 function setLoginError(message: string | null): void {
@@ -337,9 +405,12 @@ function logoutAndShowLogin(): void {
   initGoogleLogin();
 }
 
-function handleGoogleCredential(response: GoogleCredentialResponse): void {
+async function handleGoogleCredential(
+  response: GoogleCredentialResponse,
+): Promise<void> {
   try {
     const payload = parseJwtPayload(response.credential);
+    validateGooglePayload(payload);
     const email = String(payload.email ?? "").trim().toLowerCase();
     if (!email) {
       throw new Error("Brak emaila w odpowiedzi dostawcy OAuth.");
@@ -352,6 +423,9 @@ function handleGoogleCredential(response: GoogleCredentialResponse): void {
       { email, firstName, lastName },
       APP_CONFIG.superAdminEmail,
     );
+    if (!(await ensureStorageSynced())) {
+      return;
+    }
     loggedInUser = result.user;
     if (result.isNewUser) {
       sendNewAccountNotification(result.user);
@@ -368,6 +442,7 @@ function handleGoogleCredential(response: GoogleCredentialResponse): void {
     renderNotifications();
     renderNotificationDetails();
     renderUsers();
+    renderStoryOwnerOptions();
     setLoginError(null);
   } catch (error) {
     const message =
@@ -397,7 +472,9 @@ function initGoogleLogin(): void {
   googleLoginInitRetries = 0;
   window.google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
+    callback: (response) => {
+      void handleGoogleCredential(response);
+    },
   });
   googleLoginButton.innerHTML = "";
   window.google.accounts.id.renderButton(googleLoginButton, {
@@ -475,16 +552,22 @@ function updateUnreadCounter(): void {
   );
 }
 
-function markNotificationAsRead(notificationId: string): void {
+async function markNotificationAsRead(notificationId: string): Promise<void> {
   notificationService.markAsRead(notificationId);
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
   updateUnreadCounter();
   renderNotifications();
   renderNotificationDetails();
 }
 
-function openNotificationDetails(notificationId: string): void {
+async function openNotificationDetails(notificationId: string): Promise<void> {
   selectedNotificationId = notificationId;
   notificationService.markAsRead(notificationId);
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
   updateUnreadCounter();
   setActiveView("notification-details");
   renderNotifications();
@@ -530,13 +613,13 @@ function renderNotifications(): void {
     .querySelectorAll(".btn-notification-details")
     .forEach((button) => {
       button.addEventListener("click", () =>
-        openNotificationDetails((button as HTMLElement).dataset.id!),
+        void openNotificationDetails((button as HTMLElement).dataset.id!),
       );
     });
 
   notificationsList.querySelectorAll(".btn-notification-read").forEach((button) => {
     button.addEventListener("click", () =>
-      markNotificationAsRead((button as HTMLElement).dataset.id!),
+      void markNotificationAsRead((button as HTMLElement).dataset.id!),
     );
   });
 }
@@ -573,7 +656,7 @@ function renderNotificationDetails(): void {
     "#notification-detail-read-btn",
   );
   detailReadBtn?.addEventListener("click", () =>
-    markNotificationAsRead(notification.id),
+    void markNotificationAsRead(notification.id),
   );
 }
 
@@ -622,7 +705,7 @@ function renderUsers(): void {
     .join("");
 
   usersList.querySelectorAll(".user-role-select").forEach((element) => {
-    element.addEventListener("change", () => {
+    element.addEventListener("change", async () => {
       const select = element as HTMLSelectElement;
       const userId = select.dataset.id ?? "";
       const role = select.value as UserRole;
@@ -630,17 +713,22 @@ function renderUsers(): void {
       if (!updated) {
         return;
       }
+      if (!(await ensureStorageSynced())) {
+        renderUsers();
+        return;
+      }
       if (loggedInUser && loggedInUser.id === updated.id) {
         loggedInUser = updated;
       }
       renderUsers();
+      renderStoryOwnerOptions(storyOwnerInput.value);
       syncLoggedUserName();
       applyAccessMode();
     });
   });
 
   usersList.querySelectorAll(".btn-user-block").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const userId = (button as HTMLElement).dataset.id ?? "";
       const target = userService.getUserById(userId);
       if (!target) {
@@ -650,10 +738,15 @@ function renderUsers(): void {
       if (!updated) {
         return;
       }
+      if (!(await ensureStorageSynced())) {
+        renderUsers();
+        return;
+      }
       if (loggedInUser && loggedInUser.id === updated.id) {
         loggedInUser = updated;
       }
       renderUsers();
+      renderStoryOwnerOptions(storyOwnerInput.value);
       applyAccessMode();
     });
   });
@@ -797,7 +890,7 @@ function renderProjects(): void {
 
   projectList.querySelectorAll(".btn-delete").forEach((button) => {
     button.addEventListener("click", () =>
-      deleteProject((button as HTMLElement).dataset.id!),
+      void deleteProject((button as HTMLElement).dataset.id!),
     );
   });
 }
@@ -825,7 +918,7 @@ function cancelProjectEdit(): void {
   projectCancelBtn.classList.add("hidden");
 }
 
-function deleteProject(id: string): void {
+async function deleteProject(id: string): Promise<void> {
   if (!confirm("Czy na pewno chcesz usunac ten projekt?")) {
     return;
   }
@@ -836,6 +929,9 @@ function deleteProject(id: string): void {
     return;
   }
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   if (editingProjectId === id) {
     cancelProjectEdit();
@@ -902,7 +998,7 @@ function renderStories(): void {
 
   storyBoard.querySelectorAll(".btn-story-delete").forEach((button) => {
     button.addEventListener("click", () =>
-      deleteStory((button as HTMLElement).dataset.id!),
+      void deleteStory((button as HTMLElement).dataset.id!),
     );
   });
 }
@@ -936,6 +1032,7 @@ function startStoryEdit(id: string): void {
   storyDescInput.value = story.description;
   storyPriorityInput.value = story.priority;
   storyStatusInput.value = story.status;
+  renderStoryOwnerOptions(story.ownerId);
   storyFormTitle.textContent = "Edytuj historyjke";
   storySubmitBtn.textContent = "Zapisz zmiany";
   storyCancelBtn.classList.remove("hidden");
@@ -947,12 +1044,13 @@ function cancelStoryEdit(): void {
   storyForm.reset();
   storyPriorityInput.value = "sredni";
   storyStatusInput.value = "todo";
+  renderStoryOwnerOptions();
   storyFormTitle.textContent = "Nowa historyjka";
   storySubmitBtn.textContent = "Dodaj historyjke";
   storyCancelBtn.classList.add("hidden");
 }
 
-function deleteStory(id: string): void {
+async function deleteStory(id: string): Promise<void> {
   if (!confirm("Czy na pewno chcesz usunac te historyjke?")) {
     return;
   }
@@ -963,6 +1061,9 @@ function deleteStory(id: string): void {
     return;
   }
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   if (editingStoryId === id) {
     cancelStoryEdit();
@@ -1053,7 +1154,7 @@ function renderTasks(): void {
 
   taskBoard.querySelectorAll(".btn-task-delete").forEach((button) => {
     button.addEventListener("click", () =>
-      deleteTask((button as HTMLElement).dataset.id!),
+      void deleteTask((button as HTMLElement).dataset.id!),
     );
   });
 
@@ -1143,11 +1244,11 @@ function renderTaskDetails(): void {
 
   const assignButton =
     document.querySelector<HTMLButtonElement>("#assign-task-btn");
-  assignButton?.addEventListener("click", () => assignSelectedTask(task.id));
+  assignButton?.addEventListener("click", () => void assignSelectedTask(task.id));
 
   const finishButton =
     document.querySelector<HTMLButtonElement>("#finish-task-btn");
-  finishButton?.addEventListener("click", () => finishSelectedTask(task.id));
+  finishButton?.addEventListener("click", () => void finishSelectedTask(task.id));
 }
 
 function startTaskEdit(id: string): void {
@@ -1180,7 +1281,7 @@ function cancelTaskEdit(): void {
   renderTaskStoryOptions();
 }
 
-function deleteTask(id: string): void {
+async function deleteTask(id: string): Promise<void> {
   if (!confirm("Czy na pewno chcesz usunac to zadanie?")) {
     return;
   }
@@ -1194,6 +1295,9 @@ function deleteTask(id: string): void {
   }
 
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   if (editingTaskId === id) {
     cancelTaskEdit();
@@ -1208,7 +1312,7 @@ function deleteTask(id: string): void {
   renderTaskDetails();
 }
 
-function assignSelectedTask(taskId: string): void {
+async function assignSelectedTask(taskId: string): Promise<void> {
   const assigneeSelect =
     document.querySelector<HTMLSelectElement>("#details-assignee");
   const assigneeId = assigneeSelect?.value ?? "";
@@ -1225,13 +1329,16 @@ function assignSelectedTask(taskId: string): void {
   }
 
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   renderStories();
   renderTasks();
   renderTaskDetails();
 }
 
-function finishSelectedTask(taskId: string): void {
+async function finishSelectedTask(taskId: string): Promise<void> {
   const task = taskService.getTaskById(taskId);
   if (!task) {
     return;
@@ -1256,6 +1363,9 @@ function finishSelectedTask(taskId: string): void {
   }
 
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   renderStories();
   renderTasks();
@@ -1270,7 +1380,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-projectForm.addEventListener("submit", (event) => {
+projectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const name = projectNameInput.value.trim();
@@ -1291,6 +1401,9 @@ projectForm.addEventListener("submit", (event) => {
     return;
   }
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   if (editingProjectId) {
     cancelProjectEdit();
@@ -1305,7 +1418,7 @@ projectForm.addEventListener("submit", (event) => {
   renderTaskDetails();
 });
 
-storyForm.addEventListener("submit", (event) => {
+storyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const activeProject = getActiveProject();
@@ -1317,6 +1430,7 @@ storyForm.addEventListener("submit", (event) => {
   const description = storyDescInput.value.trim();
   const priority = storyPriorityInput.value as StoryPriority;
   const status = storyStatusInput.value as StoryStatus;
+  const ownerId = storyOwnerInput.value || requireLoggedInUser().id;
 
   if (!name) {
     return;
@@ -1329,7 +1443,7 @@ storyForm.addEventListener("submit", (event) => {
     priority,
     status,
     projectId: activeProject.id,
-    ownerId: requireLoggedInUser().id,
+    ownerId,
   });
 
   if (!result.ok) {
@@ -1337,12 +1451,11 @@ storyForm.addEventListener("submit", (event) => {
     return;
   }
   result.notifications.forEach((notification) => sendNotification(notification));
-
-  if (editingStoryId) {
-    cancelStoryEdit();
-  } else {
-    cancelStoryEdit();
+  if (!(await ensureStorageSynced())) {
+    return;
   }
+
+  cancelStoryEdit();
 
   renderStories();
   renderTaskStoryOptions();
@@ -1350,7 +1463,7 @@ storyForm.addEventListener("submit", (event) => {
   renderTaskDetails();
 });
 
-taskForm.addEventListener("submit", (event) => {
+taskForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const activeProject = getActiveProject();
@@ -1388,6 +1501,9 @@ taskForm.addEventListener("submit", (event) => {
     return;
   }
   result.notifications.forEach((notification) => sendNotification(notification));
+  if (!(await ensureStorageSynced())) {
+    return;
+  }
 
   if (editingTaskId) {
     cancelTaskEdit();
@@ -1432,7 +1548,7 @@ notificationModalOpenBtn.addEventListener("click", () => {
   }
   const notificationId = activeModalNotificationId;
   closeNotificationModal();
-  openNotificationDetails(notificationId);
+  void openNotificationDetails(notificationId);
 });
 logoutBtn.addEventListener("click", logoutAndShowLogin);
 blockedLogoutBtn.addEventListener("click", logoutAndShowLogin);
@@ -1449,6 +1565,7 @@ if (!loggedInUser) {
   blockedView.classList.remove("hidden");
 } else {
   syncLoggedUserName();
+  renderStoryOwnerOptions();
   renderProjects();
   renderStories();
   renderTaskStoryOptions();

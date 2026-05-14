@@ -18,6 +18,15 @@ const developerUser = {
   isBlocked: false,
 };
 
+const guestUser = {
+  id: "user-guest-e2e",
+  email: "guest-e2e@example.com",
+  firstName: "Guest",
+  lastName: "E2E",
+  role: "guest",
+  isBlocked: false,
+};
+
 async function closeNotificationModalIfVisible(page: Page): Promise<void> {
   const closeButton = page.locator("#notification-modal-close-btn");
   if (await closeButton.isVisible()) {
@@ -37,7 +46,9 @@ async function createStory(page: Page, name = "Historyjka E2E"): Promise<void> {
   await page.fill("#story-desc", `Opis: ${name}`);
   await page.selectOption("#story-priority", "wysoki");
   await page.selectOption("#story-status", "todo");
+  await page.selectOption("#story-owner", developerUser.id);
   await page.click("#story-submit-btn");
+  await closeNotificationModalIfVisible(page);
 }
 
 async function createTask(page: Page, name = "Zadanie E2E"): Promise<void> {
@@ -59,26 +70,54 @@ async function createProjectStoryAndTask(page: Page): Promise<void> {
   await createTask(page);
 }
 
-test.beforeEach(async ({ page }) => {
+async function seedLocalState(
+  page: Page,
+  options: {
+    users: unknown[];
+    loggedInUserId: string;
+    stories?: unknown[];
+    tasks?: unknown[];
+    projects?: unknown[];
+    notifications?: unknown[];
+  },
+): Promise<void> {
   await page.addInitScript(
-    ({
-      users,
-      loggedInUserId,
-    }: {
+    (input: {
       users: unknown[];
       loggedInUserId: string;
+      stories: unknown[];
+      tasks: unknown[];
+      projects: unknown[];
+      notifications: unknown[];
     }) => {
       localStorage.clear();
-      localStorage.setItem("manageme_users", JSON.stringify(users));
-      localStorage.setItem("manageme_logged_user_id", loggedInUserId);
-      localStorage.setItem("manageme_projects", "[]");
-      localStorage.setItem("manageme_stories", "[]");
-      localStorage.setItem("manageme_tasks", "[]");
-      localStorage.setItem("manageme_notifications", "[]");
-      localStorage.removeItem("manageme_active_project_id");
+      localStorage.setItem("manageme_users", JSON.stringify(input.users));
+      localStorage.setItem("manageme_logged_user_id", input.loggedInUserId);
+      localStorage.setItem("manageme_projects", JSON.stringify(input.projects));
+      localStorage.setItem("manageme_stories", JSON.stringify(input.stories));
+      localStorage.setItem("manageme_tasks", JSON.stringify(input.tasks));
+      localStorage.setItem(
+        "manageme_notifications",
+        JSON.stringify(input.notifications),
+      );
+      localStorage.setItem("manageme_app_state", "[]");
     },
-    { users: [adminUser, developerUser], loggedInUserId: adminUser.id },
+    {
+      users: options.users,
+      loggedInUserId: options.loggedInUserId,
+      projects: options.projects ?? [],
+      stories: options.stories ?? [],
+      tasks: options.tasks ?? [],
+      notifications: options.notifications ?? [],
+    },
   );
+}
+
+test.beforeEach(async ({ page }) => {
+  await seedLocalState(page, {
+    users: [adminUser, developerUser],
+    loggedInUserId: adminUser.id,
+  });
 });
 
 test("tworzenie projektu, historyjki i zadania", async ({ page }) => {
@@ -152,4 +191,39 @@ test("usuniecie zadania, historyjki i projektu", async ({
 
   await page.locator("#project-list .btn-delete").first().click();
   await expect(page.locator("#project-list")).not.toContainText("Projekt E2E");
+});
+
+test("admin moze zarzadzac lista uzytkownikow", async ({ page }) => {
+  await page.goto("/");
+
+  await page.click("#menu-users-btn");
+  await expect(page.locator("#users-list")).toContainText("dev-e2e@example.com");
+
+  const roleSelect = page.locator(`.user-role-select[data-id="${developerUser.id}"]`);
+  await roleSelect.selectOption("devops");
+  await expect(roleSelect).toHaveValue("devops");
+});
+
+test("gosc widzi ekran oczekiwania", async ({ page }) => {
+  await seedLocalState(page, {
+    users: [guestUser],
+    loggedInUserId: guestUser.id,
+  });
+
+  await page.goto("/");
+
+  await expect(page.locator("#guest-pending-view")).toBeVisible();
+  await expect(page.locator("#board-view")).toHaveClass(/hidden/);
+});
+
+test("zablokowany uzytkownik widzi widok blokady", async ({ page }) => {
+  const blockedAdmin = { ...adminUser, isBlocked: true };
+  await seedLocalState(page, {
+    users: [blockedAdmin, developerUser],
+    loggedInUserId: blockedAdmin.id,
+  });
+
+  await page.goto("/");
+  await expect(page.locator("#blocked-view")).toBeVisible();
+  await expect(page.locator("#app-shell")).toHaveClass(/hidden/);
 });
